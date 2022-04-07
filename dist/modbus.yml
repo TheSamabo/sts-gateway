@@ -1,0 +1,8 @@
+name: Modbus Channel 1 # Optional
+host: "127.0.0.1"  # Works even with IPV6, Required
+port: 5020 # Required
+slaves: # Required
+  - device_name: Meter1 # Required
+    device_type: ElectricityMeter # Optional
+    modbus_id: 1 # Required
+    register_map: "./dist/register_maps/F&F_LE-03MW-CT.yml" # Required

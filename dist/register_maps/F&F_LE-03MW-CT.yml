@@ -1,0 +1,96 @@
+attributes:
+  - starting_address: 0 # Starting register
+    elements_count: 9 # Register to read
+    data_points: 
+      - data_offset: 2 # Byte offset
+        register_count: 1 # Bytes to read
+        data_type: uint16
+        key_name: ModbusID
+      - data_offset: 4 # Byte  offset
+        register_count: 1 # Bytes to read
+        data_type: uint16
+        key_name: Baudrate
+      - data_offset: 16 # Byte  offset
+        register_count: 1 # Bytes to read
+        data_type: uint16
+        key_name: CT_Ratio
+timeseries:
+  - starting_address: 14
+    elements_count: 46
+    data_points: 
+      - data_offset: 0
+        register_count: 4
+        data_type: float
+        key_name: L1_Voltage
+      - data_offset: 4
+        register_count: 4
+        data_type: float
+        key_name: L2_Voltage
+      - data_offset: 8
+        register_count: 4
+        data_type: float
+        key_name: L3_Voltage
+      - data_offset: 12
+        register_count: 4
+        data_type: float
+        key_name: Frequency
+      - data_offset: 16
+        register_count: 4
+        data_type: float
+        key_name: L1_Current
+      - data_offset: 20
+        register_count: 4
+        data_type: float
+        key_name: L2_Current
+      - data_offset: 24
+        register_count: 4
+        data_type: float
+        key_name: L3_Current
+      - data_offset: 28
+        register_count: 4
+        data_type: float
+        key_name: TotalActivePower
+      - data_offset: 32
+        register_count: 4
+        data_type: float
+        key_name: L1_ActivePower
+      - data_offset: 36
+        register_count: 4
+        data_type: float
+        key_name: L2_ActivePower
+      - data_offset: 40
+        register_count: 4
+        data_type: float
+        key_name: L3_ActivePower
+      - data_offset: 44
+        register_count: 4
+        data_type: float
+        key_name: TotalReactivePower
+      - data_offset: 48
+        register_count: 4
+        data_type: float
+        key_name: L1_ReactivePower
+      - data_offset: 52
+        register_count: 4
+        data_type: float
+        key_name: L2_ReactivePower
+      - data_offset: 56
+        register_count: 4
+        data_type: float
+        key_name: L3_ReactivePower
+      - data_offset: 60
+        register_count: 4
+        data_type: float
+        key_name: TotalApparentPower
+      - data_offset: 64
+        register_count: 4
+        data_type: float
+        key_name: L1_ApparentPower
+      - data_offset: 68
+        register_count: 4
+        data_type: float
+        key_name: L2_ApparentPower
+      - data_offset: 72
+        register_count: 4
+        data_type: float
+        key_name: L3_ApparentPower
