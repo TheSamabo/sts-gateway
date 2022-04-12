@@ -3,9 +3,9 @@ log_config: ./dist/debug_log.yml # Required
 data_folder: ./testing/db/ # Required
 mqtt:
   host: 127.0.0.1 # Required
-  port: 5020  # Required
+  port: 1883  # Required
   qos: 1    # Required
-  tb_token: example # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
+#  tb_token: example # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
 
 channels: # Required
   - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu

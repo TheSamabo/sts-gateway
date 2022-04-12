@@ -1,6 +1,7 @@
 
 
 use chrono_tz::Europe::Bratislava;
+use clap::Parser;
 use definitions::MainConfig;
 use log4rs::config::{Appender, Root};
 use rusqlite::{Connection, Result as SqliteResult, OpenFlags, params, backup, Error as SqliteError};
@@ -43,6 +44,9 @@ mod aggregator;
 // #[tokio::main]
 fn main() {
 
+    // Read arguments if no arguments panic 
+    let args = definitions::MainArguments::parse();
+
     let mut state = MainState::new();
     
     let config_path = state.read_file("./dist/sts_gateway.yml".to_string()).unwrap();
@@ -50,6 +54,7 @@ fn main() {
     let backup_config = config.clone();
     log4rs::init_file(config.log_config.clone(), Default::default()).unwrap();
     log::info!("Starting...");
+    log::info!("Arguments: {:?}", args);
     log::debug!("Config: {:?}", config.clone()); 
 
     log::debug!("Loaded Configs with their hashes: {:?}", state.get_configured_hashes());
