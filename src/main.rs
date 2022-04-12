@@ -49,7 +49,7 @@ fn main() {
 
     let mut state = MainState::new();
     
-    let config_path = state.read_file("./dist/sts_gateway.yml".to_string()).unwrap();
+    let config_path = state.read_file(args.root_config.clone()).unwrap();
     let config: definitions::MainConfig = serde_yaml::from_str(&config_path).unwrap();
     let backup_config = config.clone();
     log4rs::init_file(config.log_config.clone(), Default::default()).unwrap();
