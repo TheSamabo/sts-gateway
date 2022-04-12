@@ -5,6 +5,15 @@ use serde_json::Result;
 
 use crate::channels::{DataPoint, ChannelConfig};
 
+use clap::Parser;
+
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct MainArguments {
+    /// Required file to startup the gateway
+    pub root_config: String
+}
 #[derive(Serialize, Deserialize)]
 pub struct OneTelemetry {
     pub ts: i64,
