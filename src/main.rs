@@ -3,24 +3,18 @@
 use chrono_tz::Europe::Bratislava;
 use clap::Parser;
 use definitions::MainConfig;
-use log4rs::config::{Appender, Root};
-use rusqlite::{Connection, Result as SqliteResult, OpenFlags, params, backup, Error as SqliteError};
-use rusqlite::NO_PARAMS;
 use serde_yaml;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::{thread, fs};
+use std::thread;
 use std::sync::{mpsc};
-use log4rs::{self, Config};
-use log::LevelFilter;
-use std::path::{self, PathBuf, Path};
-use chrono::{self, DateTime, Utc, TimeZone, NaiveDateTime};
+use log4rs::{self};
+use chrono::{self, Utc};
 use chrono_tz;
 
-use tokio_modbus::prelude::*;
 
 use crate::aggregator::Aggregator;
 use crate::channels::{ChannelConfig, Channel};
@@ -49,10 +43,16 @@ fn main() {
 
     let mut state = MainState::new();
     
+    // This should panic if the configuration is wrong...
     let config_path = state.read_file(args.root_config.clone()).unwrap();
+
+    // This should panic if the configuration is wrong...
     let config: definitions::MainConfig = serde_yaml::from_str(&config_path).unwrap();
     let backup_config = config.clone();
+
+    // This should panic if the configuration is wrong...
     log4rs::init_file(config.log_config.clone(), Default::default()).unwrap();
+
     log::info!("Starting...");
     log::info!("Arguments: {:?}", args);
     log::debug!("Config: {:?}", config.clone()); 
@@ -65,12 +65,19 @@ fn main() {
         log::info!("Starting storage thread...");
         let config = config_clone;
 
-        // HARD CODED PATH  --- TODO: CHANGE
-        let mut storage = storage::SqliteStorage::new(config.data_folder, storage_rx).unwrap();
+        match  storage::SqliteStorage::new(config.data_folder, storage_rx) {
+            Ok(mut storage) => {
 
-        loop {
-            storage.process();
+                loop {
+                    storage.process();
+                }
+            },
+            Err(e) => {
+                log::error!("Error creating sqlite storage process... {:?}", e);
+                panic!("Could not start storage process...");
+            }
         }
+
     });
 
     let (transport_tx, transport_rx) = mpsc::channel::<TransportAction>();
@@ -84,14 +91,24 @@ fn main() {
     let aggregator = Aggregator::new(aggregation_rx, storage_tx.clone(), transport_tx.clone());
     let aggregator_handle = aggregator.run();
 
+    // For testing purposes...
     let modbus_raw = state.read_file("./dist/modbus.yml".to_string()).unwrap();
     let modbus_config = ModbusClientTcpConfig::serialize(modbus_raw).unwrap();
 
     let mut register_maps: HashMap<ModbusSlave, ModbusRegisterMap> = HashMap::new();
     for slave in modbus_config.slaves.clone() {
-       let register_map_raw = state.read_file(slave.register_map.clone()).unwrap(); 
-       let register_map = serde_yaml::from_str::<ModbusRegisterMap>(&register_map_raw).unwrap();
-        register_maps.insert(slave, register_map);
+       match state.read_file(slave.register_map.clone()) {
+           Ok(register_map_raw) => {
+
+            let register_map = serde_yaml::from_str::<ModbusRegisterMap>(&register_map_raw).unwrap();
+                register_maps.insert(slave, register_map);
+
+           },
+           Err(e) => {
+               log::error!("Error reading file path: {:?}, {:?}", slave.register_map, e );
+           }
+
+       }
     }
     let modbus_channel = ModbusTcpChannel::new(modbus_config, register_maps, aggregation_tx.clone());
     let modbus_handle = modbus_channel.run();
@@ -102,6 +119,10 @@ fn main() {
     // Start MPSC channel that we can pass wto storage thread
 
     // Start new storage thread
+    // This thread schould also schedule compactions
+    // Compaction is a process where we delete old data stored in local database
+    // it is essential to work properly. becouse a faulty compaction could couse that
+    // the system drive where this is running to be full. 
     backup_db_scheduler(storage_tx.clone(), backup_config).join().unwrap();
     
     aggregator_handle.join().unwrap();
