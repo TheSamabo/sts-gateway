@@ -54,6 +54,8 @@ impl Aggregator {
                                 }).to_string();
                                 log::debug!("JSON Attributes: {:?}", attributes_message);
                                 log::debug!("JSON Timeseries: {:?}", timeseries_message);
+                                
+                                // This is unsafe as fuck
                                 self.storage_tx.send(SqliteStorageAction::InsertBoth(Insert{
                                     ts,
                                     device_name,
@@ -61,6 +63,7 @@ impl Aggregator {
                                     attributes_message: Some(attributes_message.clone())
                                 // String
                                 })).unwrap();
+                                // As are these...
                                 self.transport_tx.send(TransportAction::SendTimeseries(timeseries_message)).unwrap();
                                 self.transport_tx.send(TransportAction::SendAttributes(attributes_message)).unwrap();
                             },

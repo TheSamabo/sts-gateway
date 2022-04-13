@@ -1,7 +1,6 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread::JoinHandle;
 use std::thread;
-use std::time::Duration;
 use crate::definitions::{MqttConfig, TransportAction, MainConfig};
 use crate::storage::SqliteStorageAction;
 
