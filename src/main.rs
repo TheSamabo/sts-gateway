@@ -139,7 +139,7 @@ fn backup_db_scheduler(storage_tx: Sender<storage::SqliteStorageAction>, config:
         let mut scheduler = job_scheduler::JobScheduler::new();
 
         let job = job_scheduler::Job::new(
-            job_scheduler::Schedule::from_str("1 10/1 * * * *").unwrap(), || {
+            job_scheduler::Schedule::from_str("* 10/1 * * * *").unwrap(), || {
 
             let datetime = Utc::now();
             let datetime = datetime.with_timezone(&Bratislava);
