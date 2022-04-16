@@ -65,9 +65,16 @@ impl SqliteStorage{
         // }
 
         let con = Connection::open(data_path)?;
-        con.execute(r#"CREATE TABLE IF NOT EXISTS 
-            messages(ts INTEGER, device_name TEXT, timeseries_message TEXT, attributes_message TEXT)"#, [])
-            .unwrap();
+        match con.execute(r#"CREATE TABLE IF NOT EXISTS 
+            messages(ts INTEGER, device_name TEXT, timeseries_message TEXT, attributes_message TEXT)"#, []) {
+                Ok(modified_rows) => {
+                    log::debug!("Created table \"messages\" in database! Affected rows: {}", modified_rows);
+                },
+                Err(e) => {
+                    log::error!("Could not create table to store messages with rusqlite, Error: {:?}", e);
+                }
+            }
+        
         Ok(Self {
             connection: con,
             rx,
@@ -94,6 +101,7 @@ impl SqliteStorage{
                             VALUES(?1, ?2, ?3, ?4)"#, params![
                                  insert.ts,
                                  insert.device_name,
+                                 // These are safe unwraps, at least i hope so
                                  insert.timeseries_message.unwrap(),
                                  insert.attributes_message.unwrap()
                              ]) {

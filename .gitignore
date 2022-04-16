@@ -4,3 +4,4 @@ target/
 testing/
 *.log
 Cargo.lock
+*journal
