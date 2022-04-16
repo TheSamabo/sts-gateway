@@ -56,16 +56,27 @@ impl Aggregator {
                                 log::debug!("JSON Timeseries: {:?}", timeseries_message);
                                 
                                 // This is unsafe as fuck
-                                self.storage_tx.send(SqliteStorageAction::InsertBoth(Insert{
+                                match self.storage_tx.send(SqliteStorageAction::InsertBoth(Insert{
                                     ts,
                                     device_name,
                                     timeseries_message: Some(timeseries_message.clone()),
                                     attributes_message: Some(attributes_message.clone())
                                 // String
-                                })).unwrap();
+                                })) {
+                                    Ok(_) => log::trace!("Sent messages: {} and {} to storage!", attributes_message, timeseries_message),
+                                    Err(e) => {
+                                        log::error!("Error sending messages: {} and {} to SqliteStorage!... {:?}", attributes_message, timeseries_message, e)
+                                    }
+                                }
                                 // As are these...
-                                self.transport_tx.send(TransportAction::SendTimeseries(timeseries_message)).unwrap();
-                                self.transport_tx.send(TransportAction::SendAttributes(attributes_message)).unwrap();
+                                match self.transport_tx.send(TransportAction::SendTimeseries(timeseries_message.clone())) {
+                                    Ok(_) => log::trace!("SentTimeseries to transport with message: {}", timeseries_message),
+                                    Err(e) => log::error!("Error while sending a message to trasport channel: {:?}",e)
+                                };
+                                match self.transport_tx.send(TransportAction::SendAttributes(attributes_message.clone())) {
+                                    Ok(_) => log::trace!("SentAttributes to transport with message: {}", attributes_message),
+                                    Err(e) => log::error!("Error while sending a message to trasport channel: {:?}",e)
+                                };
                             },
                             _ => {},
                             AggregatorAction::SendStatistics(stats) => {}

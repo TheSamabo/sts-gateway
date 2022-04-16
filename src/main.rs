@@ -113,7 +113,7 @@ fn main() {
     let modbus_channel = ModbusTcpChannel::new(modbus_config, register_maps, aggregation_tx.clone());
     let modbus_handle = modbus_channel.run();
 
-    let mqtt_config = config.mqtt.clone();
+    // let mqtt_config = config.mqtt.clone();
 
 
     // Start MPSC channel that we can pass wto storage thread
@@ -139,7 +139,7 @@ fn backup_db_scheduler(storage_tx: Sender<storage::SqliteStorageAction>, config:
         let mut scheduler = job_scheduler::JobScheduler::new();
 
         let job = job_scheduler::Job::new(
-            job_scheduler::Schedule::from_str("* 10/1 * * * *").unwrap(), || {
+            job_scheduler::Schedule::from_str("1 1/10 * * * *").unwrap(), || {
 
             let datetime = Utc::now();
             let datetime = datetime.with_timezone(&Bratislava);
@@ -149,7 +149,10 @@ fn backup_db_scheduler(storage_tx: Sender<storage::SqliteStorageAction>, config:
             backup_name.push_str(&date_string);
             log::trace!("Picked a backup name: {}", backup_name);
 
-            storage_tx.send(storage::SqliteStorageAction::BackupDB(backup_name));
+            match storage_tx.send(storage::SqliteStorageAction::BackupDB(backup_name)) {
+                Ok(_) => log::trace!("Sent backup command to SqliteStorage"),
+                Err(e) => log::error!("Could not send backup command to SqliteStorage, {:?}", e)
+            };
         });
 
         scheduler.add(job);

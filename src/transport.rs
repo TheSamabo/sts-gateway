@@ -1,6 +1,7 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread::JoinHandle;
 use std::thread;
+use std::time::Duration;
 use crate::definitions::{MqttConfig, TransportAction, MainConfig};
 use crate::storage::SqliteStorageAction;
 
@@ -55,17 +56,32 @@ impl MqttTransport {
                 loop {
                     match self.transport_rx.recv().unwrap() {
                         TransportAction::SendTimeseries(telemetry) => {
-                            client.publish(TB_DEVICE_TELEMETRI_TOPIC, qos, false, telemetry.as_bytes()).unwrap();
+                            match client.publish(TB_DEVICE_TELEMETRI_TOPIC, qos, false, telemetry.as_bytes()) {
+                                Ok(_) => log::trace!("Message successfuly sent!"),
+                                Err(e) => log::error!("Error sending message: {:?} on topic: {}, Error: {:?}",
+                                    telemetry,TB_DEVICE_TELEMETRI_TOPIC, e)
+                            }
                         },
                         TransportAction::SendAttributes(attributes) => {
-                            client.publish(TB_DEVICE_ATTRIBUTES_TOPIC, qos, false, attributes.as_bytes()).unwrap();
+                            match client.publish(TB_DEVICE_ATTRIBUTES_TOPIC, qos, false, attributes.as_bytes()) {
+                                Ok(_) => log::trace!("Message successfuly sent!"),
+                                Err(e) => log::error!("Error sending message: {:?} on topic: {}, Error: {}",
+                                attributes ,TB_DEVICE_ATTRIBUTES_TOPIC, e)
+                            }
                         },
                         _ => {}
                     }
                 }
             });
             for (i, notification) in connection.iter().enumerate() {
-                log::debug!("Notification = {:?}", notification);
+                match notification {
+                    Ok(e) => log::trace!("Notification = {:?}", e),
+                    Err(error) => {
+                        log::error!("Mqtt Error: {:?}", error);
+                        thread::sleep(Duration::from_secs(5))
+                    }
+
+                };
             }
         });
 
