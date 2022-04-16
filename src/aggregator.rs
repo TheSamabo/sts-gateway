@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use crate::storage::Insert;
 use crate::{definitions::{AggregatorAction, TransportAction}, storage::SqliteStorageAction};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::json;
 
 // TODO:
@@ -78,8 +78,7 @@ impl Aggregator {
                                     Err(e) => log::error!("Error while sending a message to trasport channel: {:?}",e)
                                 };
                             },
-                            _ => {},
-                            AggregatorAction::SendStatistics(stats) => {}
+                            // AggregatorAction::SendStatistics(stats) => {}
                         };
                     }
                 }

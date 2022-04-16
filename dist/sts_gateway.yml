@@ -9,4 +9,4 @@ mqtt:
 
 channels: # Required
   - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu
-    file: modbus.yaml # Required
+    file: ./dist/modbus.yml # Required

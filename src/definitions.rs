@@ -1,9 +1,7 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use serde_json::Result;
 
-use crate::channels::{DataPoint, ChannelConfig};
 
 use clap::Parser;
 
@@ -67,7 +65,7 @@ pub struct MqttConfig {
 pub enum TransportAction {
     SendTimeseries(String), // Already parsed json string
     SendAttributes(String),
-    SendClientSideRPC
+    // SendClientSideRPC
 }
 
 // pub struct DataCombined {
@@ -76,9 +74,9 @@ pub enum TransportAction {
 // }
 pub enum AggregatorAction {
     SendBoth(AttributeMessage, TimeseriesMessage),
-    SendAttributes(AttributeMessage),
-    SendTimeseries(TimeseriesMessage),
-    SendStatistics(AttributeMessage) // will store some statistics in device attributes
+    // SendAttributes(AttributeMessage),
+    // SendTimeseries(TimeseriesMessage),
+    // SendStatistics(AttributeMessage) // will store some statistics in device attributes
 }
 // pub struct RootConfig {
     
