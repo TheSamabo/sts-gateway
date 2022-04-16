@@ -20,7 +20,7 @@ use crate::aggregator::Aggregator;
 use crate::channels::{ChannelConfig, Channel};
 use crate::channels::modbus::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave};
 use crate::channels::modbus::tcp::ModbusTcpChannel;
-use crate::definitions::{TransportAction, AggregatorAction};
+use crate::definitions::{TransportAction, AggregatorAction, ChannelType};
 use crate::transport::MqttTransport;
 
 mod storage;
@@ -57,7 +57,6 @@ fn main() {
     log::info!("Arguments: {:?}", args);
     log::debug!("Config: {:?}", config.clone()); 
 
-    log::debug!("Loaded Configs with their hashes: {:?}", state.get_configured_hashes());
 
     let (storage_tx, storage_rx) = mpsc::channel::<storage::SqliteStorageAction>();
     let config_clone = config.clone();
@@ -91,27 +90,72 @@ fn main() {
     let aggregator = Aggregator::new(aggregation_rx, storage_tx.clone(), transport_tx.clone());
     let aggregator_handle = aggregator.run();
 
-    // For testing purposes...
-    let modbus_raw = state.read_file("./dist/modbus.yml".to_string()).unwrap();
-    let modbus_config = ModbusClientTcpConfig::serialize(modbus_raw).unwrap();
+    let mut channel_handles: Vec<JoinHandle<()>> = vec![];
 
-    let mut register_maps: HashMap<ModbusSlave, ModbusRegisterMap> = HashMap::new();
-    for slave in modbus_config.slaves.clone() {
-       match state.read_file(slave.register_map.clone()) {
-           Ok(register_map_raw) => {
+    // Initialize found channel definitions
+    for channel_definition in config.channels {
 
-            let register_map = serde_yaml::from_str::<ModbusRegisterMap>(&register_map_raw).unwrap();
-                register_maps.insert(slave, register_map);
+        // try to read file at specified location in definition
+        let raw = match state.read_file(channel_definition.file.clone()) {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("Could not read channel config file for channel config: {:?} , error: {:?}", channel_definition, e);
+                continue;
+            }
+        };
 
-           },
-           Err(e) => {
-               log::error!("Error reading file path: {:?}, {:?}", slave.register_map, e );
-           }
+        match channel_definition._type {
+            ChannelType::ModbusTcp => {
+                let modbus_config = match ModbusClientTcpConfig::serialize(raw) {
+                    Ok(conf) => conf,
+                    Err(e) => {
+                        log::error!("Error serializing ModbusClientTcpConfig: {:?}", e);
+                        continue;
+                    }
+                };
+                let mut register_maps: HashMap<ModbusSlave, ModbusRegisterMap> = HashMap::new();
+                
+                // We cannot have a channel that could have a 1 correct register for a device and 1 that is wrong
+                // Either all the register maps are correct none of them are.
+                // By correct i mean a correct yaml format
+                let mut skip_slave: bool = false;
+                for slave in modbus_config.slaves.clone() {
+                   match state.read_file(slave.register_map.clone()) {
+                       Ok(register_map_raw) => {
+            
+                        let register_map = match serde_yaml::from_str::<ModbusRegisterMap>(&register_map_raw) {
+                            Ok(rm) => rm,
+                            Err(e) => {
+                                log::error!("Error in register maps: {:?}", e);
+                                skip_slave = true;
+                                break;
+                            }
+                        };
+                            register_maps.insert(slave, register_map);
+            
+                       },
+                       Err(e) => {
+                           log::error!("Error reading file path: {:?}, {:?}", slave.register_map, e );
+                       }
+            
+                   }
+                }
+                if skip_slave { continue };
+                let modbus_channel = ModbusTcpChannel::new(modbus_config, register_maps, aggregation_tx.clone());
+                channel_handles.push(modbus_channel.run());
 
-       }
+
+            },
+            _ => {}
+        }
     }
-    let modbus_channel = ModbusTcpChannel::new(modbus_config, register_maps, aggregation_tx.clone());
-    let modbus_handle = modbus_channel.run();
+
+    log::debug!("Loaded Configs with their hashes: {:?}", state.get_configured_hashes());
+    // For testing purposes...
+    // let modbus_raw = state.read_file("./dist/modbus.yml".to_string()).unwrap();
+    // let modbus_config = ModbusClientTcpConfig::serialize(modbus_raw).unwrap();
+
+    // l
 
     // let mqtt_config = config.mqtt.clone();
 
@@ -128,7 +172,7 @@ fn main() {
     aggregator_handle.join().unwrap();
     transport_handle.join().unwrap();
     storage_handle.join().unwrap();
-    modbus_handle.join().unwrap();
+    // modbus_handle.join().unwrap();
 }
 
 
