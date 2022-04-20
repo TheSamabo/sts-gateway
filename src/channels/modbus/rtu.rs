@@ -11,7 +11,7 @@ use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
 
 use tokio::sync::Mutex;
 // use tokio_modbus::prelude::*;
-use libmodbus_rs::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode};
+use libmodbus_rs::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, SerialMode, Timeout, RequestToSendMode};
 use tokio_serial::{DataBits, Parity, StopBits, SerialStream};
 use tokio;
 #[derive(Debug)]
@@ -78,45 +78,57 @@ impl Channel for ModbusRtuChannel {
         };
         let handle = thread::spawn(move || {
             // let serial_stream = SerialStream::open(&serial_builder).unwrap();
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let tokio_handle = rt.handle();
-            let _guard = tokio_handle.enter();
+            // let rt = tokio::runtime::Runtime::new().unwrap();
+            // let tokio_handle = rt.handle();
+            // let _guard = tokio_handle.enter();
             
             let aggregator = self.aggregator_tx.clone();
             let reg_maps  = self.register_maps.clone();
-            let serial_builder = tokio_serial::new(self.config.port.clone(), self.config.baudrate).clone();
-            let serial_builder =  serial_builder.parity(parity.clone());
-            let serial_builder = serial_builder.stop_bits(stop_bits.clone());
-            let serial_builder = serial_builder.data_bits(data_bits);
-            let serial_builder = serial_builder.timeout(Duration::from_secs(10)); 
+            // let serial_builder = tokio_serial::new(self.config.port.clone(), self.config.baudrate).clone();
+            // let serial_builder =  serial_builder.parity(parity.clone());
+            // let serial_builder = serial_builder.stop_bits(stop_bits.clone());
+            // let serial_builder = serial_builder.data_bits(data_bits);
+            // let serial_builder = serial_builder.timeout(Duration::from_secs(10)); 
 
-            let modbus = Modbus::new_rtu(
+            let mut modbus = Modbus::new_rtu(
                     &self.config.port,
-                    self.config.baudrate as i32,
+                    self.config.baudrate.try_into().unwrap(),
                     self.config.parity,
-                    self.config.data_bits as i32,
-                    self.config.stop_bits as i32).unwrap();
+                    self.config.data_bits.into(),
+                    self.config.stop_bits.into()).unwrap();
 
-                thread::sleep(Duration::from_millis(2000));
+            modbus.set_debug(true);
+            modbus.rtu_set_serial_mode(SerialMode::RtuRS232).unwrap();
+            // modbus.rtu_set_rts(RequestToSendMode::RtuRtsUp).unwrap();
+            modbus.set_byte_timeout(Timeout::new(1,5)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,60)).unwrap();
+            modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+
+            loop {
                 for (slave, reg_map) in &reg_maps {
                     // Set correct ModbusID to call on
                     // ctx.set_slave(Slave(slave.modbus_id));
+                    modbus.set_slave(slave.modbus_id).unwrap();
+                    modbus.connect().unwrap();
 
                     let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
                     let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
                     // Read Attributes 
                     for reg_group in &reg_map.attributes {
                         
+                        let mut read_buffer =  vec![0u16; 100];
+
                         let mut data_point_vec: Vec<DataPoint> = vec![];
 
                         // Call group 
                         log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
-                        let reg_response = ctx.read_holding_registers(
+                        let reg_response = modbus.read_registers(
                                 reg_group.starting_address,
-                                reg_group.elements_count);
+                                reg_group.elements_count,
+                                &mut read_buffer);
 
                         let reg_response = match reg_response {
-                            Ok(res) => res,
+                            Ok(res) => log::debug!("Read {:?} holding registers...", res ),
                             Err(e) => {
                                 log::error!("Error reading holding registers: {:?}", e);
                                 continue
@@ -124,7 +136,7 @@ impl Channel for ModbusRtuChannel {
                         };
 
                         for data_point in &reg_group.data_points {
-                            let point = data_point.parse(reg_response.clone());
+                            let point = data_point.parse(read_buffer.clone());
                             data_point_vec.push(point.clone());
                             // parse into message
                             attributes_message.1.insert(point.key, point.value);
@@ -137,16 +149,19 @@ impl Channel for ModbusRtuChannel {
                     // Read Timeseries
                     for reg_group in &reg_map.timeseries {
                         
+                        let mut read_buffer = vec![0u16; 100];
+
                         let mut data_point_vec: Vec<DataPoint> = vec![];
 
                         // Call group 
                         log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
-                        let reg_response = ctx.read_holding_registers(
+                        let reg_response = modbus.read_registers(
                                 reg_group.starting_address,
-                                reg_group.elements_count);
+                                reg_group.elements_count,
+                                &mut read_buffer);
                         
                         let reg_response = match reg_response {
-                            Ok(res) => res,
+                            Ok(res) => log::debug!("Read {:?} holding registers...", res ),
                             Err(e) => {
                                 log::error!("Error reading holding registers: {:?}", e);
                                 continue
@@ -154,7 +169,7 @@ impl Channel for ModbusRtuChannel {
                         };
 
                         for data_point in &reg_group.data_points {
-                            let point = data_point.parse(reg_response.clone());
+                            let point = data_point.parse(read_buffer.clone());
                             data_point_vec.push(point);
                         }
                         log::info!("Read and parsed register group with data {} points", data_point_vec.len());
@@ -166,6 +181,8 @@ impl Channel for ModbusRtuChannel {
                         _ => {}
                     }
                 }
+                thread::sleep(Duration::from_millis(10000))
+            }
                 
         });
         handle

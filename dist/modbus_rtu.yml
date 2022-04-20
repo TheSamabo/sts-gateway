@@ -1,7 +1,7 @@
 name: ModbusChannel2
-port: /dev/serial # Works even with IPV6, Required
+port: /dev/ttyUSB0 # Works even with IPV6, Required
 baudrate: 9600 # Required
-parity: E
+parity: 'E'
 data_bits: 7
 stop_bits: 1
 slaves: # Required
