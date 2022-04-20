@@ -31,14 +31,14 @@ pub enum ModbusRegisterMapType {
     Timeseries(Vec<ModbusRegisterGroup>)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModbusRegisterMap {
     pub attributes: Vec<ModbusRegisterGroup>,
     pub timeseries: Vec<ModbusRegisterGroup>,
 }
 
 // This struct could be use in server implementaion later
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModbusRegisterGroup {
     pub starting_address: u16, // Starting read address
     pub elements_count: u16,   // How many registers to read from starting_address
@@ -46,7 +46,7 @@ pub struct ModbusRegisterGroup {
     pub data: Option<Vec<u16>> // Data that was read from modbus
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ModbusDataType {
     Double, // f64
@@ -56,7 +56,7 @@ pub enum ModbusDataType {
     UInt32, // u32
     UInt16, // u16
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModbusDataPointReader {
     pub data_offset: usize,
     pub register_count: usize,
@@ -186,33 +186,32 @@ impl ChannelConfig for ModbusClientTcpConfig {
 }
 
 // TODO: IMplemet Into trait for tokio_serial::SerialPortBuilder
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ModbusClientRtuConfig {
+    pub name: Option<String>,
     pub port: String,
     pub baudrate: u32,
-    pub parity: Parity,
-    pub data_bits: DataBits,
-    pub stop_bits: StopBits
+    pub parity: char,
+    pub data_bits: u8,
+    pub stop_bits: u8,
+    pub slaves: Vec<ModbusSlave>
 }
 
-impl<'de> Deserialize<'de> for ModbusClientRtuConfig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de> {
-            let s = String::deserialize(deserializer)?;
-            log::debug!("Deserializer ModbusClientRtuConfig: {:?}", s);
-            todo!();
-    }
-
-    fn deserialize_in_place<D>(deserializer: D, place: &mut Self) -> Result<(), D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        // Default implementation just delegates to `deserialize` impl.
-        *place = Deserialize::deserialize(deserializer)?;
-        Ok(())
+impl ChannelConfig for ModbusClientRtuConfig {
+    fn serialize(config_string: String) -> Result<Self, Error> where Self: Sized {
+        from_str::<ModbusClientRtuConfig>(&config_string)
     }
 }
+
+// impl<'de> Deserialize<'de> for ModbusClientRtuConfig {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de> {
+//             let s = String::deserialize(deserializer)?;
+//             log::debug!("Deserializer ModbusClientRtuConfig: {:?}", s);
+//             todo!();
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
