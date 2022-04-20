@@ -5,6 +5,7 @@ use crate::{channels::{Channel, ChannelStatus}, definitions::AggregatorAction};
 
 use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
 
+#[derive(Debug)]
 pub struct ModbusRtuChannel {
     config: ModbusClientRtuConfig,
     status: ChannelStatus,
@@ -27,8 +28,10 @@ impl ModbusRtuChannel {
     }
 }
 
+
 impl Channel for ModbusRtuChannel {
     fn run(mut self) -> JoinHandle<()>{
+        log::warn!("RTU CONFIG: {:?}", self);
         todo!()
     }
 

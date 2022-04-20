@@ -146,7 +146,9 @@ fn main() {
 
 
             },
-            _ => {}
+            ChannelType::ModbusRtu => {
+                
+            }
         }
     }
 

@@ -9,6 +9,7 @@ use crate::definitions::OneTelemetry;
 pub mod modbus;
 
 
+#[derive(Debug)]
 pub enum ChannelStatus {
     Running,
     Stopped,
