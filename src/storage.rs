@@ -1,4 +1,5 @@
 
+use chrono::Utc;
 use rusqlite::{Connection, Result as SqliteResult, OpenFlags, params, backup, Error as SqliteError};
 use rusqlite::NO_PARAMS;
 use serde_json::Value;
@@ -24,6 +25,10 @@ pub struct Insert {
     pub attributes_message: Option<String>
 }
 
+pub enum SqliteStorageTruncate {
+    FixedWindow(chrono::Duration)
+}
+
 pub enum SqliteStorageAction {
     InsertAttributes(Insert),
     InsertTimeseries(Insert),
@@ -31,6 +36,7 @@ pub enum SqliteStorageAction {
     CloseDB,
     // BackupDB need a string  that is the destination of backup db
     BackupDB(String),
+    Truncate(SqliteStorageTruncate), // Start 
     Timeout
 }
 
@@ -125,6 +131,18 @@ impl SqliteStorage{
                 log::info!("Starting Database backup ...");
                 backup_db(&self.connection, path, self.data_dir.clone()).unwrap();
             },
+            SqliteStorageAction::Truncate(trun) => {
+                log::info!("Starting trucation process...");
+                match trun {
+                    SqliteStorageTruncate::FixedWindow(older_than) => {
+                        log::info!("Selected FixedWindow truncation...");
+                        match truncate_fixed_window(&self.connection, older_than) {
+                            Ok(_) => log::info!("Successfuly truncated"),
+                            Err(e) => log::error!("Error truncating database: {:?}", e)
+                        }
+                    }
+                }
+            }
             SqliteStorageAction::CloseDB => {
                 log::info!("Closing DB...");
 
@@ -135,6 +153,17 @@ impl SqliteStorage{
             _ => {}
         };
     }
+}
+
+pub fn truncate_fixed_window(con: &Connection, older_than: chrono::Duration) -> SqliteResult<()> {
+    let now = Utc::now();
+    let old = now - older_than;
+    log::info!("Truncating data older than {} UTC", old.to_string());
+    let deleted = con.execute(r#"
+        DELETE FROM messages WHERE ts NOT BETWEEN 1? AND 2?
+    "#, params![old.timestamp_millis(), now.timestamp_millis()])?;
+    log::info!("Truncated {} rows...", deleted);
+    Ok(())
 }
 
 
