@@ -97,8 +97,8 @@ impl Channel for ModbusRtuChannel {
                     self.config.data_bits.into(),
                     self.config.stop_bits.into()).unwrap();
 
-            modbus.set_debug(true);
-            modbus.rtu_set_serial_mode(SerialMode::RtuRS232).unwrap();
+            // modbus.set_debug(true);
+            // modbus.rtu_set_serial_mode(SerialMode::RtuRS485).unwrap();
             // modbus.rtu_set_rts(RequestToSendMode::RtuRtsUp).unwrap();
             modbus.set_byte_timeout(Timeout::new(1,5)).unwrap();
             modbus.set_response_timeout(Timeout::new(1,60)).unwrap();
@@ -181,7 +181,7 @@ impl Channel for ModbusRtuChannel {
                         _ => {}
                     }
                 }
-                thread::sleep(Duration::from_millis(10000))
+                thread::sleep(Duration::from_millis(30000))
             }
                 
         });

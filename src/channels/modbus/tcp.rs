@@ -63,7 +63,7 @@ impl Channel for ModbusTcpChannel {
             // let socket_addr = socket_addr.into();
             loop { 
                 // log::info!("Sleeping for 20s");
-                thread::sleep(Duration::from_millis(10000));
+                thread::sleep(Duration::from_millis(30000));
                 
                 // Error Handle
                 match sync::tcp::connect(socket) {
