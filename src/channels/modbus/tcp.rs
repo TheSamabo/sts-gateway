@@ -4,12 +4,10 @@ use crate::definitions::{AggregatorAction, OneTelemetry};
 use super::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave};
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs, Ipv4Addr, IpAddr};
-use std::str::FromStr;
 use std::{sync::mpsc, thread::JoinHandle};
 use std::thread;
 use std::time::Duration;
 use tokio_modbus::prelude::*;
-use chrono::{DateTime, Utc};
 // use tokio;
 
 use crate::definitions::{AttributeMessage, TimeseriesMessage};
@@ -65,7 +63,7 @@ impl Channel for ModbusTcpChannel {
             // let socket_addr = socket_addr.into();
             loop { 
                 // log::info!("Sleeping for 20s");
-                thread::sleep(Duration::from_millis(10000));
+                thread::sleep(Duration::from_millis(30000));
                 
                 // Error Handle
                 match sync::tcp::connect(socket) {

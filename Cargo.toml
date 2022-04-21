@@ -9,9 +9,10 @@ license = "MPL 2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio-modbus = { version ="^0.5" , features = ["sync"] }
+tokio-modbus = { version ="^0.5" , features = ["sync", "tcp", "rtu"] }
+libmodbus-rs = "^0.8"
 tokio-serial = "^5.4"
-#tokio = { version = "^1.17", features = ["macros", "rt-multi-thread"]}
+tokio = { version = "^1.17", features = ["macros", "rt-multi-thread"]}
 serde = { version = "*", features = ["derive"]}
 serde_json = "*" 
 serde_yaml = "*"

@@ -17,8 +17,9 @@ use chrono_tz;
 
 
 use crate::aggregator::Aggregator;
+use crate::channels::modbus::rtu::ModbusRtuChannel;
 use crate::channels::{ChannelConfig, Channel};
-use crate::channels::modbus::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave};
+use crate::channels::modbus::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave, ModbusClientRtuConfig};
 use crate::channels::modbus::tcp::ModbusTcpChannel;
 use crate::definitions::{TransportAction, AggregatorAction, ChannelType};
 use crate::transport::MqttTransport;
@@ -35,8 +36,8 @@ mod aggregator;
 // we will compare the hashes and determine which part of the gateway to reload
 
 
-// #[tokio::main]
-fn main() {
+#[tokio::main]
+async fn main() {
 
     // Read arguments if no arguments panic 
     let args = definitions::MainArguments::parse();
@@ -60,6 +61,8 @@ fn main() {
 
     let (storage_tx, storage_rx) = mpsc::channel::<storage::SqliteStorageAction>();
     let config_clone = config.clone();
+
+    // TODO: Move this somewhere more appropriete
     let storage_handle = thread::spawn(move || {
         log::info!("Starting storage thread...");
         let config = config_clone;
@@ -116,7 +119,7 @@ fn main() {
                 let mut register_maps: HashMap<ModbusSlave, ModbusRegisterMap> = HashMap::new();
                 
                 // We cannot have a channel that could have a 1 correct register for a device and 1 that is wrong
-                // Either all the register maps are correct none of them are.
+                // Either all the register maps are correct or none of them are.
                 // By correct i mean a correct yaml format
                 let mut skip_slave: bool = false;
                 for slave in modbus_config.slaves.clone() {
@@ -146,7 +149,48 @@ fn main() {
 
 
             },
-            _ => {}
+            // TODO: Deduplicate code...
+            ChannelType::ModbusRtu => {
+                let modbus_config = match ModbusClientRtuConfig::serialize(raw) {
+                    Ok(conf) => conf,
+                    Err(e) => {
+                        log::error!("Error serializing ModbusClientRtuConfig: {:?}", e);
+                        continue;
+                    }
+                };
+                let mut register_maps: HashMap<ModbusSlave, ModbusRegisterMap> = HashMap::new();
+                
+                // We cannot have a channel that could have a 1 correct register for a device and 1 that is wrong
+                // Either all the register maps are correct or none of them are.
+                // By correct i mean a correct yaml format
+                let mut skip_slave: bool = false;
+                for slave in modbus_config.slaves.clone() {
+
+                   match state.read_file(slave.register_map.clone()) {
+                       Ok(register_map_raw) => {
+            
+                        let register_map = match serde_yaml::from_str::<ModbusRegisterMap>(&register_map_raw) {
+                            Ok(rm) => rm,
+                            Err(e) => {
+                                log::error!("Error in register maps: {:?}", e);
+                                skip_slave = true;
+                                break;
+                            }
+                        };
+                            register_maps.insert(slave, register_map);
+            
+                       },
+                       Err(e) => {
+                           log::error!("Error reading file path: {:?}, {:?}", slave.register_map, e );
+                       }
+            
+                   }
+                }
+                
+                if skip_slave { continue };
+                let modbus_channel = ModbusRtuChannel::new(modbus_config, register_maps, aggregation_tx.clone());
+                channel_handles.push(modbus_channel.run());
+            }
         }
     }
 
