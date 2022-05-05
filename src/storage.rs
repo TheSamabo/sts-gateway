@@ -1,4 +1,5 @@
 
+use chrono::Utc;
 use rusqlite::{Connection, Result as SqliteResult, OpenFlags, params, backup, Error as SqliteError};
 use rusqlite::NO_PARAMS;
 use serde_json::Value;
@@ -10,6 +11,8 @@ use std::time::Duration;
 use std::fs;
 use std::io::BufWriter;
 use zstd;
+
+use crate::definitions::{Storage, StorageSizeManagement};
 
 // fn insert_message(message: Value, ts: Option<i64> , device_name: &str, con: &Connection) -> SqliteResult<> {
 
@@ -24,6 +27,10 @@ pub struct Insert {
     pub attributes_message: Option<String>
 }
 
+pub enum SqliteStorageTruncate {
+    FixedWindow(chrono::Duration)
+}
+
 pub enum SqliteStorageAction {
     InsertAttributes(Insert),
     InsertTimeseries(Insert),
@@ -31,6 +38,7 @@ pub enum SqliteStorageAction {
     CloseDB,
     // BackupDB need a string  that is the destination of backup db
     BackupDB(String),
+    Truncate(SqliteStorageTruncate), // Start 
     Timeout
 }
 
@@ -45,16 +53,27 @@ impl SqliteStorage{
     /// Expects parameter: 
     /// path: String  - path to folder where it will store database and backups 
     /// rx: mpsc::Receiver<SqliteStorageAction> - Receiver so that we can send Actions to do somethings
-    pub fn new(path: String, rx: mpsc::Receiver<SqliteStorageAction>) -> SqliteResult<Self> {
+    pub fn new(
+        data_folder: String,
+        rx: mpsc::Receiver<SqliteStorageAction>) -> SqliteResult<Self> {
         let mut data_path = PathBuf::new();
         let mut data_dir = PathBuf::new();
+        let path = data_folder;
         match path.ends_with(".db") {
             true => {
                 data_path = Path::new(&path).to_path_buf();
+                match fs::create_dir_all(data_path.parent().unwrap()) {
+                    Ok(_) => log::info!("Created database directories"),
+                    Err(e) => log::error!("Error creating database directories: {:?}", e)
+                }
             },
             false => {
-            let tmp_data_folder = Path::new(&path).to_path_buf();
-            data_path = tmp_data_folder.join("data.db");
+                match fs::create_dir_all(path.clone()) {
+                    Ok(_) => log::info!("Created database directories"),
+                    Err(e) => log::error!("Error creating database directories: {:?}", e)
+                }
+                let tmp_data_folder = Path::new(&path).to_path_buf();
+                data_path = tmp_data_folder.join("data.db");
                 log::debug!("Apeended \"data.db\" to database folder path: {}", data_path.display());
             }
         };
@@ -123,8 +142,20 @@ impl SqliteStorage{
             },
             SqliteStorageAction::BackupDB(path) => {
                 log::info!("Starting Database backup ...");
-                backup_db(&self.connection, path, self.data_dir.clone()).unwrap();
+                backup_db(&self.connection, path).unwrap();
             },
+            SqliteStorageAction::Truncate(trun) => {
+                log::info!("Starting trucation process...");
+                match trun {
+                    SqliteStorageTruncate::FixedWindow(older_than) => {
+                        log::info!("Selected FixedWindow truncation...");
+                        match truncate_fixed_window(&self.connection, older_than) {
+                            Ok(_) => log::info!("Successfuly truncated"),
+                            Err(e) => log::error!("Error truncating database: {:?}", e)
+                        }
+                    }
+                }
+            }
             SqliteStorageAction::CloseDB => {
                 log::info!("Closing DB...");
 
@@ -137,11 +168,21 @@ impl SqliteStorage{
     }
 }
 
+pub fn truncate_fixed_window(con: &Connection, older_than: chrono::Duration) -> SqliteResult<()> {
+    let now = Utc::now();
+    let old = now - older_than;
+    log::info!("Truncating data older than {} UTC", old.to_string());
+    let deleted = con.execute(r#"
+        DELETE FROM messages WHERE ts NOT BETWEEN ?1 AND ?2
+    "#, params![old.timestamp_millis(), now.timestamp_millis()])?;
+    log::info!("Truncated {} rows...", deleted);
+    Ok(())
+}
+
 
 pub fn backup_db(
     src: &Connection,
     dst_path: String,
-    data_dir: PathBuf
 ) -> SqliteResult<()> {
     let dest_path = PathBuf::from(&dst_path);
     let mut dst = Connection::open(dst_path.clone())?;
@@ -159,21 +200,20 @@ pub fn backup_db(
         Ok(_) => {
             log::info!("Backup Complete!");
             
-            if Path::exists(Path::new(&dest_path))  {
-                log::debug!("Starting Compression Thread!");
-                thread::spawn(move || {
-                    let dest_path = dest_path;
-                    log::trace!("Compression Thread started...");
-                    let database_bytes = fs::read(dest_path.clone()).expect("Could not read database file");
-                    let compress = zstd::bulk::compress(database_bytes.as_slice(), 1).unwrap();
-                    log::trace!("Compressed database: From {:?} To {:?}", database_bytes.len(),compress.len());
-                    log::trace!("Data dir in compression thread: {}", data_dir.display());
-                    let compressed_file = data_dir.join(Path::new("backup/").join(dest_path.with_extension("db.zst")));
-                    log::trace!("Compressed file path: {}", compressed_file.display());
-                    fs::write(compressed_file, compress).unwrap();
-                    fs::remove_file(dest_path).unwrap();
-                });
+            if !Path::exists(Path::new(&dest_path))  {
             }
+            log::debug!("Starting Compression Thread!");
+            thread::spawn(move || {
+                let dest_path = dest_path;
+                log::trace!("Compression Thread started...");
+                let database_bytes = fs::read(dest_path.clone()).expect("Could not read database file");
+                let compress = zstd::bulk::compress(database_bytes.as_slice(), 1).unwrap();
+                log::trace!("Compressed database: From {:?} To {:?}", database_bytes.len(),compress.len());
+                let compressed_file = dest_path.with_extension("db.zst");
+                log::trace!("Compressed file path: {}", compressed_file.display());
+                fs::write(compressed_file, compress).unwrap();
+                fs::remove_file(dest_path).unwrap();
+            }).join().unwrap();
             Ok(())
         },
         Err(e) => {

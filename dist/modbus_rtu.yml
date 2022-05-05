@@ -2,7 +2,7 @@ name: ModbusChannel2
 port: /dev/ttyUSB0 # Works even with IPV6, Required
 baudrate: 9600 # Required
 parity: 'E'
-data_bits: 7
+data_bits: 8
 stop_bits: 1
 slaves: # Required
   - device_name: Meter1 # Required

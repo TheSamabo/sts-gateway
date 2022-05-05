@@ -30,10 +30,32 @@ pub type TimeseriesMessage = (String, Vec<OneTelemetry>);
 pub struct MainConfig {
     pub name: String,
     pub log_config: String,
-    pub data_folder: String,
     pub channels: Vec<ChannelDefinition>,
+    pub storage: Storage,
     pub mqtt: MqttConfig
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum Storage {
+    #[serde(rename = "sqlite")]
+    Sqlite {data_folder: String, size_management: StorageSizeManagement, backup_management: StorageBackupManagement} 
+
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum StorageSizeManagement {
+    #[serde(rename = "fixed_window")]
+    FixedWindow {messages_ttl_check: String, messages_ttl: i32}
+}
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum StorageBackupManagement {
+    #[serde(rename = "local")]
+    Local {backup_folder: String, backup_interval: String, backup_ttl: i32}
+}
+
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 // #[serde(untagged)]
