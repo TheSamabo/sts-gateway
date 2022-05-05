@@ -21,7 +21,7 @@ use crate::channels::modbus::rtu::ModbusRtuChannel;
 use crate::channels::{ChannelConfig, Channel};
 use crate::channels::modbus::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave, ModbusClientRtuConfig};
 use crate::channels::modbus::tcp::ModbusTcpChannel;
-use crate::definitions::{TransportAction, AggregatorAction, ChannelType};
+use crate::definitions::{TransportAction, AggregatorAction, ChannelType, Storage};
 use crate::transport::MqttTransport;
 
 mod storage;
@@ -56,7 +56,7 @@ async fn main() {
 
     log::info!("Starting...");
     log::info!("Arguments: {:?}", args);
-    log::debug!("Config: {:?}", config.clone()); 
+    log::debug!("Config: {:#?}", config.clone()); 
 
 
     let (storage_tx, storage_rx) = mpsc::channel::<storage::SqliteStorageAction>();
@@ -66,19 +66,25 @@ async fn main() {
     let storage_handle = thread::spawn(move || {
         log::info!("Starting storage thread...");
         let config = config_clone;
+        match config.storage {
+            Storage::Sqlite { data_folder, size_management, backup_management } => {
+                match  storage::SqliteStorage::new(data_folder, storage_rx) {
+                    Ok(mut storage) => {
 
-        match  storage::SqliteStorage::new(config.data_folder, storage_rx) {
-            Ok(mut storage) => {
-
-                loop {
-                    storage.process();
+                        loop {
+                            storage.process();
+                        }
+                    },
+                    Err(e) => {
+                        log::error!("Error creating sqlite storage process... {:?}", e);
+                        panic!("Could not start storage process...");
+                    }
                 }
-            },
-            Err(e) => {
-                log::error!("Error creating sqlite storage process... {:?}", e);
-                panic!("Could not start storage process...");
+
             }
+
         }
+
 
     });
 

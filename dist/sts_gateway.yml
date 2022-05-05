@@ -1,14 +1,26 @@
 name: Testing Gateway # Required
 log_config: ./dist/debug_log.yml # Required
-data_folder: ./testing/db/ # Required
 mqtt:
   host: 127.0.0.1 # Required
   port: 1883  # Required
   qos: 1    # Required
 #  tb_token: example # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
+storage:
+  type: sqlite
+  data_folder: ./testing/db/
+  size_management: # Size management is executed before every backup
+    type: fixed_window
+    messages_ttl_check: "1 1/10 * * * * " # in cronjob style eg: sec min hour day_of_month month day_of_week year, more info: https://docs.rs/job_scheduler/1.2.1/job_scheduler/ 
+    messages_ttl: 24 # in hours
+  backup_management:
+    type: local  # types: local - saves copy of DB on local filesystem with an option to delete older copies
+    backup_folder: ./testing/db/backup/
+    backup_interval: "1 1/10 * * * *" # in cronjob style 
+    backup_ttl: 1 # in hours
+
 
 channels: # Required
-  # - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu
-    # file: ./dist/modbus_tcp.yml # Required
-  - type: modbus_rtu # Required Options: modbus_tcp , modbus_rtu
-    file: ./dist/modbus_rtu.yml # Required
+  - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu
+    file: ./dist/modbus_tcp.yml # Required
+  # - type: modbus_rtu # Required Options: modbus_tcp , modbus_rtu
+    # file: ./dist/modbus_rtu.yml # Required

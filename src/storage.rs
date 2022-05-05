@@ -12,6 +12,8 @@ use std::fs;
 use std::io::BufWriter;
 use zstd;
 
+use crate::definitions::{Storage, StorageSizeManagement};
+
 // fn insert_message(message: Value, ts: Option<i64> , device_name: &str, con: &Connection) -> SqliteResult<> {
 
 // }
@@ -51,9 +53,12 @@ impl SqliteStorage{
     /// Expects parameter: 
     /// path: String  - path to folder where it will store database and backups 
     /// rx: mpsc::Receiver<SqliteStorageAction> - Receiver so that we can send Actions to do somethings
-    pub fn new(path: String, rx: mpsc::Receiver<SqliteStorageAction>) -> SqliteResult<Self> {
+    pub fn new(
+        data_folder: String,
+        rx: mpsc::Receiver<SqliteStorageAction>) -> SqliteResult<Self> {
         let mut data_path = PathBuf::new();
         let mut data_dir = PathBuf::new();
+        let path = data_folder;
         match path.ends_with(".db") {
             true => {
                 data_path = Path::new(&path).to_path_buf();
