@@ -165,7 +165,7 @@ pub fn truncate_fixed_window(con: &Connection, older_than: chrono::Duration) -> 
     let old = now - older_than;
     log::info!("Truncating data older than {} UTC", old.to_string());
     let deleted = con.execute(r#"
-        DELETE FROM messages WHERE ts NOT BETWEEN 1? AND 2?
+        DELETE FROM messages WHERE ts NOT BETWEEN ?1 AND ?2
     "#, params![old.timestamp_millis(), now.timestamp_millis()])?;
     log::info!("Truncated {} rows...", deleted);
     Ok(())

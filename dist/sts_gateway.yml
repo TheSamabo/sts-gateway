@@ -1,9 +1,10 @@
 name: Testing Gateway # Required
 log_config: ./dist/debug_log.yml # Required
 mqtt:
-  host: 127.0.0.1 # Required
-  port: 1883  # Required
+  host: 87.197.189.92 # Required
+  port: 50002  # Required
   qos: 1    # Required
+<<<<<<< Updated upstream
 #  tb_token: example # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
 storage:
   type: sqlite
@@ -18,6 +19,9 @@ storage:
     backup_interval: "1 1/10 * * * *" # in cronjob style 
     backup_ttl: 1 # in hours
 
+=======
+  tb_token: nacoheslo # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
+>>>>>>> Stashed changes
 
 channels: # Required
   - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu

@@ -242,6 +242,11 @@ fn backup_db_scheduler(storage_tx: Sender<storage::SqliteStorageAction>, config:
             let mut backup_name = config.name.replace(" ", "_").to_lowercase();
             backup_name.push_str(&date_string);
             log::trace!("Picked a backup name: {}", backup_name);
+            log::info!("Sending truncation command");
+            match storage_tx.send(storage::SqliteStorageAction::Truncate(storage::SqliteStorageTruncate::FixedWindow(chrono::Duration::seconds(30)))) {
+                Ok(_) => log::trace!("Sent truncation command successfuly"),
+                Err(e) => log::error!("Could not send truncation command error: {:?}", e)
+            };
 
             match storage_tx.send(storage::SqliteStorageAction::BackupDB(backup_name)) {
                 Ok(_) => log::trace!("Sent backup command to SqliteStorage"),
