@@ -2,13 +2,16 @@
 
 use chrono_tz::Europe::Bratislava;
 use clap::Parser;
-use definitions::MainConfig;
+use definitions::{MainConfig, StorageBackupManagement};
+use job_scheduler::JobScheduler;
 use serde_yaml;
 use std::collections::HashMap;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+use std::fs;
 use std::thread;
 use std::sync::{mpsc};
 use log4rs::{self};
@@ -21,7 +24,8 @@ use crate::channels::modbus::rtu::ModbusRtuChannel;
 use crate::channels::{ChannelConfig, Channel};
 use crate::channels::modbus::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave, ModbusClientRtuConfig};
 use crate::channels::modbus::tcp::ModbusTcpChannel;
-use crate::definitions::{TransportAction, AggregatorAction, ChannelType, Storage};
+use crate::definitions::{TransportAction, AggregatorAction, ChannelType, Storage, StorageSizeManagement};
+use crate::storage::SqliteStorageTruncate;
 use crate::transport::MqttTransport;
 
 mod storage;
@@ -61,19 +65,36 @@ async fn main() {
 
     let (storage_tx, storage_rx) = mpsc::channel::<storage::SqliteStorageAction>();
     let config_clone = config.clone();
+    let storage_tx_clone = storage_tx.clone();
 
     // TODO: Move this somewhere more appropriete
     let storage_handle = thread::spawn(move || {
         log::info!("Starting storage thread...");
-        let config = config_clone;
+        let config = config_clone.clone();
         match config.storage {
             Storage::Sqlite { data_folder, size_management, backup_management } => {
+                
+
+                let _backup_join = match backup_management {
+                    StorageBackupManagement::Local { backup_folder, backup_interval, backup_ttl } => {
+                        match size_management {
+                            StorageSizeManagement::FixedWindow { messages_ttl_check, messages_ttl } => {
+                                backup_local_fixed_window_scheduler(
+                                    storage_tx_clone.clone(), config_clone.clone(), backup_interval, backup_ttl, backup_folder, messages_ttl_check, messages_ttl)
+                            }
+                        }
+                    }
+                };
+
+
                 match  storage::SqliteStorage::new(data_folder, storage_rx) {
                     Ok(mut storage) => {
 
                         loop {
                             storage.process();
                         }
+                        _backup_join.join().unwrap();
+
                     },
                     Err(e) => {
                         log::error!("Error creating sqlite storage process... {:?}", e);
@@ -217,53 +238,115 @@ async fn main() {
     // Compaction is a process where we delete old data stored in local database
     // it is essential to work properly. becouse a faulty compaction could couse that
     // the system drive where this is running to be full. 
-    backup_db_scheduler(storage_tx.clone(), backup_config).join().unwrap();
     
+    storage_handle.join().unwrap();
     aggregator_handle.join().unwrap();
     transport_handle.join().unwrap();
-    storage_handle.join().unwrap();
     // modbus_handle.join().unwrap();
 }
-
+fn truncate_fixed_window(storage_tx: Sender<storage::SqliteStorageAction>, config: MainConfig, messages_ttl_check: String, messeges_ttl: i32) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut scheduler = job_scheduler::JobScheduler::new();
+        log::debug!("Registering truncate_fixed_window job on interval: {}", messages_ttl_check);
+    })
+}
 
 // TODO: 
-fn backup_db_scheduler(storage_tx: Sender<storage::SqliteStorageAction>, config: MainConfig) -> JoinHandle<()> {
+fn backup_local_fixed_window_scheduler(storage_tx: Sender<storage::SqliteStorageAction>,
+        config: MainConfig,
+        backup_interval: String,
+        backup_ttl: i32,
+        backup_folder: String,
+        messages_ttl_check: String,
+        messages_ttl: i32) -> JoinHandle<()> {
+
+    let backup_storage_tx = storage_tx.clone();
+    let backup_messages_ttl_clone = messages_ttl.clone();
+
     thread::spawn(move || {
-
         let mut scheduler = job_scheduler::JobScheduler::new();
-
-        let job = job_scheduler::Job::new(
-            job_scheduler::Schedule::from_str("1 1/10 * * * *").unwrap(), || {
+        log::debug!("Registering backup_local_scheduler on interval: {}", backup_interval);
+        let backup_job = job_scheduler::Job::new(
+            job_scheduler::Schedule::from_str(&backup_interval).unwrap(), move || {
 
             let datetime = Utc::now();
             let datetime = datetime.with_timezone(&Bratislava);
+            let backup_path = Path::new(&backup_folder);
 
-            let date_string = datetime.format("_%F_%X.db").to_string();
+            if !backup_path.exists() {
+                match fs::create_dir_all(backup_path) {
+                    Ok(_) => log::info!("Created backup directories..."),
+                    Err(e) => log::error!("Failed to create backup directories: {:?}", e)
+                }
+            }
+
+            let date_string = datetime.format(":%+.db").to_string();
             let mut backup_name = config.name.replace(" ", "_").to_lowercase();
             backup_name.push_str(&date_string);
             log::trace!("Picked a backup name: {}", backup_name);
+
+            let backup_path = backup_path.join(backup_name);
+            log::trace!("Full backup path: {:?}", backup_path);
             log::info!("Sending truncation command");
-            match storage_tx.send(storage::SqliteStorageAction::Truncate(storage::SqliteStorageTruncate::FixedWindow(chrono::Duration::seconds(30)))) {
+            match backup_storage_tx.send(storage::SqliteStorageAction::Truncate(
+                storage::SqliteStorageTruncate::FixedWindow(chrono::Duration::hours(backup_messages_ttl_clone.into()))))  {
                 Ok(_) => log::trace!("Sent truncation command successfuly"),
                 Err(e) => log::error!("Could not send truncation command error: {:?}", e)
             };
 
-            match storage_tx.send(storage::SqliteStorageAction::BackupDB(backup_name)) {
+            match backup_storage_tx.send(storage::SqliteStorageAction::BackupDB(backup_path.display().to_string())) {
                 Ok(_) => log::trace!("Sent backup command to SqliteStorage"),
                 Err(e) => log::error!("Could not send backup command to SqliteStorage, {:?}", e)
             };
-        });
 
-        scheduler.add(job);
+            // Delete old backups
+            match fs::read_dir(backup_folder.clone()) {
+                Ok(dir) => {
+                    let v = 3600u64 * backup_ttl as u64;
+                    let delta = Duration::from_secs(v);
+                    let now = SystemTime::now();
+                    let older_than = now - delta;
+                    
+                    for entry_result in dir {
+
+                        if let Ok(entry) = entry_result {
+                            let entry_metadata = entry.metadata().unwrap();
+                            if entry_metadata.is_file() {
+                                if let Ok(created) = entry_metadata.created() {
+                                    if created  < older_than {
+                                        match fs::remove_file(entry.path()) {
+                                            Ok(_) => log::info!("Deleted old backup: {}", entry.path().display()),
+                                            Err(e) => log::error!("Error deleting expired backups: {:?}", e)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                    }
+                },
+                Err(e) => log::error!("Could not read backup directory {} : {:?}", backup_folder, e)
+            }
+        });
+        let truncate_job = job_scheduler::Job::new(
+            job_scheduler::Schedule::from_str(&messages_ttl_check).unwrap(), move || {
+                match storage_tx.send(storage::SqliteStorageAction::Truncate(SqliteStorageTruncate::FixedWindow(
+                    chrono::Duration::hours(messages_ttl.into())))) {
+                        Ok(_) => log::debug!("Truncate JOB: Sent truncate command"),
+                        Err(e) => log::error!("Error sending truncate command")
+                    }
+            }
+        );
+
+        scheduler.add(backup_job);
+        scheduler.add(truncate_job);
 
         loop {
             scheduler.tick();
-            thread::sleep(Duration::from_millis(250))
+            thread::sleep(Duration::from_millis(500));
         }
     })
-    
 
-    
 }
 
 
