@@ -51,6 +51,7 @@ impl MqttTransport {
         let handle = thread::spawn(move || {
             let (mut client, mut connection) = Client::new(options, 10);
             // TODO: Implement other topics to use eg: RPC request topics
+            let mut client_clone = client.clone();
             thread::spawn(move || {
                 log::info!("Ready to accept TransportActions!");
                 loop {
@@ -78,6 +79,10 @@ impl MqttTransport {
                     Ok(e) => log::trace!("Notification = {:?}", e),
                     Err(error) => {
                         log::error!("Mqtt Error: {:?}", error);
+                        match client_clone.disconnect() {
+                            Ok(_) => log::info!("Send mqtt disconnect!"),
+                            Err(e) => log::error!("Error sending mqtt disconnect: {:?}",e)
+                        };
                         thread::sleep(Duration::from_secs(5))
                     }
 
