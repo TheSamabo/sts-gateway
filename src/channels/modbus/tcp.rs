@@ -7,7 +7,8 @@ use std::net::{SocketAddr, ToSocketAddrs, Ipv4Addr, IpAddr};
 use std::{sync::mpsc, thread::JoinHandle};
 use std::thread;
 use std::time::Duration;
-use tokio_modbus::prelude::*;
+// use tokio_modbus::prelude::*;
+use libmodbus_rs::{Modbus, ModbusTCPPI};
 // use tokio;
 
 use crate::definitions::{AttributeMessage, TimeseriesMessage};
@@ -46,6 +47,8 @@ impl Channel for ModbusTcpChannel {
 
             let addr: IpAddr = self.config.host.parse().unwrap();
             let socket = SocketAddr::from((addr, self.config.port));
+            let modbus = Modbus::new_tcp_pi(&socket.ip().to_string(), &socket.port().to_string());
+
 
             // let mut socket_addr: SocketAddr = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 502);
             // if self.config.host.contains(":") {
@@ -66,7 +69,7 @@ impl Channel for ModbusTcpChannel {
                 thread::sleep(Duration::from_millis(30000));
                 
                 // Error Handle
-                match sync::tcp::connect(socket) {
+                match modbus {
                     Ok(mut ctx) => {
                         for (slave, reg_map) in &mut self.register_maps {
                             // Set correct ModbusID to call on
