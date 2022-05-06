@@ -1,9 +1,9 @@
-use crate::channels::{Channel, ChannelConfig, ChannelStatus, DataPoint};
+use crate::channels::{Channel, ChannelStatus, DataPoint};
 use crate::definitions::{AggregatorAction, OneTelemetry};
 
 use super::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave};
 use std::collections::HashMap;
-use std::net::{SocketAddr, ToSocketAddrs, Ipv4Addr, IpAddr};
+use std::net::{SocketAddr, IpAddr};
 use std::{sync::mpsc, thread::JoinHandle};
 use std::thread;
 use std::time::Duration;
@@ -75,7 +75,7 @@ impl Channel for ModbusTcpChannel {
                             // Set correct ModbusID to call on
                             match ctx.set_slave(slave.modbus_id) {
                                 Ok(_) => log::trace!("Switched to slave with id: {}", slave.modbus_id),
-                                Err(e) => log::error!("Error switching to modbus slave id: {} error: {:?}". slave.modbus_id, e)
+                                Err(e) => log::error!("Error switching to modbus slave id: {} error: {:?}", slave.modbus_id, e)
                             };
 
                             let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
