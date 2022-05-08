@@ -47,9 +47,11 @@ impl MqttTransport {
         if let Some(token) = self.config.mqtt.tb_token {
             options.set_credentials(token, String::from(""));
         }
+        options.set_clean_session(true);
+        options.set_keep_alive(Duration::from_secs(15));
 
         let handle = thread::spawn(move || {
-            let (mut client, mut connection) = Client::new(options, 10);
+            let (mut client, mut connection) = Client::new(options, 1000);
             // TODO: Implement other topics to use eg: RPC request topics
             let mut client_clone = client.clone();
             thread::spawn(move || {
@@ -74,16 +76,14 @@ impl MqttTransport {
                     }
                 }
             });
+            let options = &connection.eventloop.options.clone();
             for (i, notification) in connection.iter().enumerate() {
                 match notification {
                     Ok(e) => log::trace!("Notification = {:?}", e),
                     Err(error) => {
                         log::error!("Mqtt Error: {:?}", error);
-                        match client_clone.disconnect() {
-                            Ok(_) => log::info!("Send mqtt disconnect!"),
-                            Err(e) => log::error!("Error sending mqtt disconnect: {:?}",e)
-                        };
-                        thread::sleep(Duration::from_secs(5))
+                        log::error!("MQTT Settings: {:#?}", options );
+                        // thread::sleep(Duration::from_millis(100))
                     }
 
                 };
