@@ -1,4 +1,4 @@
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver, RecvError, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::thread;
 use std::time::Duration;
@@ -9,7 +9,7 @@ const TB_DEVICE_ATTRIBUTES_TOPIC: &str = "v1/gateway/attributes";
 const TB_DEVICE_TELEMETRI_TOPIC: &str = "v1/gateway/telemetry";
 const TB_DEVICE_CONNECT_TOPIC: &str = "v1/gateway/connect";
 
-use rumqttc::{Client, MqttOptions, QoS};
+use paho_mqtt as mqtt;
 
 pub struct MqttTransport {
     pub config: MainConfig,
@@ -33,61 +33,76 @@ impl MqttTransport {
     pub fn run(self) -> JoinHandle<()> {
 
         let qos = match self.config.mqtt.qos {
-            0 => QoS::AtMostOnce,
-            1 => QoS::ExactlyOnce,
-            _ => QoS::AtLeastOnce,
+            0 => 0_i32,
+            1 => 1_i32,
+            _ => 2_i32,
         };
         
-        let mut options = MqttOptions::new(
-            self.config.name,
-                self.config.mqtt.host,
-                self.config.mqtt.port    
-        );
+        let mut client_options = mqtt::CreateOptionsBuilder::new()
+            .client_id(self.config.name)
+            .server_uri(format!("tcp://{}:{}", self.config.mqtt.host, self.config.mqtt.port))
+            .finalize();
+        let mut connection_options = mqtt::ConnectOptionsBuilder::new();
+        let _ = &connection_options.clean_session(true)
+            .automatic_reconnect(Duration::from_secs(2), Duration::from_secs(120))
+            .keep_alive_interval(Duration::from_secs(15))
+            .max_inflight(200);
+            
         // Tb token auth
         if let Some(token) = self.config.mqtt.tb_token {
-            options.set_credentials(token, String::from(""));
+            connection_options.user_name(token);
         }
-        options.set_clean_session(true);
-        options.set_keep_alive(Duration::from_secs(15));
+        let connection_options = connection_options.finalize();
 
         let handle = thread::spawn(move || {
-            let (mut client, mut connection) = Client::new(options, 1000);
+            let client = mqtt::AsyncClient::new(client_options).unwrap_or_else(|e| {
+                log::error!("Error creating MQTT Client: {:?}", e);
+                panic!("Error creating MQTT Client: {:?}", e)
+            });
             // TODO: Implement other topics to use eg: RPC request topics
-            let mut client_clone = client.clone();
+            // let mut client_clone = client.clone();
             thread::spawn(move || {
                 log::info!("Ready to accept TransportActions!");
+                if let Err(ct) = client.connect(connection_options).wait() {
+                    log::error!("Could not connect to mqtt broker: {:?}", ct);
+                }
                 loop {
-                    match self.transport_rx.recv().unwrap() {
-                        TransportAction::SendTimeseries(telemetry) => {
-                            match client.publish(TB_DEVICE_TELEMETRI_TOPIC, qos, false, telemetry.as_bytes()) {
-                                Ok(_) => log::trace!("Message successfuly sent!"),
-                                Err(e) => log::error!("Error sending message: {:?} on topic: {}, Error: {:?}",
-                                    telemetry,TB_DEVICE_TELEMETRI_TOPIC, e)
-                            }
-                        },
-                        TransportAction::SendAttributes(attributes) => {
-                            match client.publish(TB_DEVICE_ATTRIBUTES_TOPIC, qos, false, attributes.as_bytes()) {
-                                Ok(_) => log::trace!("Message successfuly sent!"),
-                                Err(e) => log::error!("Error sending message: {:?} on topic: {}, Error: {}",
-                                attributes ,TB_DEVICE_ATTRIBUTES_TOPIC, e)
-                            }
-                        },
-                        _ => {}
+                    if !client.is_connected() {
+                        client.reconnect_with_callbacks(
+                            |_,_| {
+                            log::info!("Reconnected successfuly!");
+                        }, 
+                        |_c, _rc, e| {
+                            log::error!("Could not reconnect to broker... {:?}", mqtt::error_message(e));
+                        });
+                    }
+                    match self.transport_rx.recv_timeout(Duration::from_millis(10000)) {
+                        Err(RecvTimeoutError) => log::trace!("recv timeout"),
+                        Ok(action) => match action {
+                            TransportAction::SendTimeseries(telemetry) => {
+                                let msg = mqtt::Message::new(TB_DEVICE_TELEMETRI_TOPIC, telemetry.as_bytes(), qos);
+                                match client.publish(msg).wait() {
+                                    Ok(_) => log::debug!("Successfuly sent message!"),
+                                    Err(e) => log::error!("Error sending message: {:?}", e)
+                                }
+
+                            },
+                            TransportAction::SendAttributes(attributes) => {
+                                let msg = mqtt::Message::new(TB_DEVICE_ATTRIBUTES_TOPIC, attributes.as_bytes(), qos);
+                                match client.publish(msg).wait() {
+                                    Ok(_) => log::debug!("Successfuly sent message!"),
+                                    Err(e) => log::error!("Error sending message: {:?}", e)
+                                }
+                            },
+                            _ => {}
+                        }
                     }
                 }
             });
-            let options = &connection.eventloop.options.clone();
-            for (i, notification) in connection.iter().enumerate() {
-                match notification {
-                    Ok(e) => log::trace!("Notification = {:?}", e),
-                    Err(error) => {
-                        log::error!("Mqtt Error: {:?}", error);
-                        log::error!("MQTT Settings: {:#?}", options );
-                        // thread::sleep(Duration::from_millis(100))
-                    }
+            
 
-                };
-            }
+
+
         });
 
         handle
