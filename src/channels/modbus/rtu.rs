@@ -98,8 +98,8 @@ impl Channel for ModbusRtuChannel {
             // modbus.set_debug(true);
             // modbus.rtu_set_serial_mode(SerialMode::RtuRS485).unwrap();
             // modbus.rtu_set_rts(RequestToSendMode::RtuRtsUp).unwrap();
-            modbus.set_byte_timeout(Timeout::new(0,500000)).unwrap();
-            modbus.set_response_timeout(Timeout::new(1,500000)).unwrap();
+            modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
             modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
 
             loop {

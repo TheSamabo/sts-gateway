@@ -69,8 +69,8 @@ impl Channel for ModbusTcpChannel {
             // socket_addr.set_port(self.config.port);
             // let socket_addr = socket_addr.into();
             
-            modbus.set_byte_timeout(Timeout::new(0,500000)).unwrap();
-            modbus.set_response_timeout(Timeout::new(1,500000)).unwrap();
+            modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
             modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
             loop { 
                 // log::info!("Sleeping for 20s");
