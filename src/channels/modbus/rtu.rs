@@ -38,55 +38,12 @@ impl Channel for ModbusRtuChannel {
     fn run(self) -> JoinHandle<()>{
         log::trace!("RTU CONFIG: {:?}", self);
 
-        // let parity = match self.config.parity {
-        //     'E' => {
-        //         Parity::Even
-        //     },
-        //     'N' => {
-        //         Parity::None
-        //     },
-        //     'O' => {
-        //         Parity::Odd
-        //     },
-        //     _ => { 
-        //         log::error!("Unexpected parity character... defaulting to parity N");
-        //         Parity::None
-        //     }
-        // };
-
-        // let stop_bits = match self.config.stop_bits {
-        //     1 => StopBits::One,
-        //     2 => StopBits::Two,
-        //     _ => {
-        //         log::error!("Unexpected number of stopbits... defaulting to Stopbit::One");
-        //         StopBits::One
-        //     }
-        // };
-        // let data_bits = match self.config.data_bits {
-        //     5 => DataBits::Five,
-        //     6 => DataBits::Six,
-        //     7 => DataBits::Seven,
-        //     8 => DataBits::Eight,
-        //     _ => {
-        //         log::error!("Unexpected number of databits... defaulting to 8 data bits");
-        //         DataBits::Eight
-        //     }
-        // };
         let builder = thread::Builder::new()
             .name(self.config.name)
             .spawn(move || {
-            // let serial_stream = SerialStream::open(&serial_builder).unwrap();
-            // let rt = tokio::runtime::Runtime::new().unwrap();
-            // let tokio_handle = rt.handle();
-            // let _guard = tokio_handle.enter();
-            
+
             let aggregator = self.aggregator_tx.clone();
             let reg_maps  = self.register_maps.clone();
-            // let serial_builder = tokio_serial::new(self.config.port.clone(), self.config.baudrate).clone();
-            // let serial_builder =  serial_builder.parity(parity.clone());
-            // let serial_builder = serial_builder.stop_bits(stop_bits.clone());
-            // let serial_builder = serial_builder.data_bits(data_bits);
-            // let serial_builder = serial_builder.timeout(Duration::from_secs(10)); 
 
             let mut modbus = Modbus::new_rtu(
                     &self.config.port,
@@ -108,7 +65,15 @@ impl Channel for ModbusRtuChannel {
                     // ctx.set_slave(Slave(slave.modbus_id));
                     log::info!("Connecting to slave with id: {}",slave.modbus_id );
                     modbus.set_slave(slave.modbus_id).unwrap();
-                    modbus.connect().unwrap(); // UNSAFE , TODO: MAKE IT SAFE
+                    match modbus.connect() {
+                        Ok(_) => log::info!("Connected to slave {}", slave.modbus_id),
+                        Err(e) => {
+                            log::error!("Error connecting to slave with id {} on serial line: {} - error {:?}"
+                            ,slave.modbus_id, self.config.port, e);
+                            modbus.close();
+                            continue;
+                        }
+                    };
 
                     let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
                     let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
