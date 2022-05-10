@@ -94,3 +94,119 @@ timeseries:
         register_count: 4
         data_type: float
         key_name: L3_ApparentPower
+      - data_offset: 76
+        register_count: 4
+        data_type: float
+        key_name: TotalPowerFactor
+      - data_offset: 80
+        register_count: 4
+        data_type: float
+        key_name: L1_PowerFactor
+      - data_offset: 84
+        register_count: 4
+        data_type: float
+        key_name: L2_PowerFactor
+      - data_offset: 88
+        register_count: 4
+        data_type: float
+        key_name: L3_PowerFactor
+
+  - starting_address: 256
+    elements_count: 24
+    data_points: 
+      - data_offset: 0
+        register_count: 4
+        data_type: float
+        key_name: GrandTotalActiveEnergy
+      - data_offset: 4
+        register_count: 4
+        data_type: float
+        key_name: L1_TotalActiveEnergy
+      - data_offset: 8
+        register_count: 4
+        data_type: float
+        key_name: L2_TotalActiveEnergy
+      - data_offset: 12
+        register_count: 4
+        data_type: float
+        key_name: L3_TotalActiveEnergy
+      - data_offset: 16
+        register_count: 4
+        data_type: float
+        key_name: TotalActiveEnergyImport
+      - data_offset: 20
+        register_count: 4
+        data_type: float
+        key_name: L1_ActiveEnergyImport
+      - data_offset: 24
+        register_count: 4
+        data_type: float
+        key_name: L2_ActiveEnergyImport
+      - data_offset: 28
+        register_count: 4
+        data_type: float
+        key_name: L3_ActiveEnergyImport
+      - data_offset: 32
+        register_count: 4
+        data_type: float
+        key_name: TotalActiveEnergyExport
+      - data_offset: 36
+        register_count: 4
+        data_type: float
+        key_name: L1_ActiveEnergyExport
+      - data_offset: 40
+        register_count: 4
+        data_type: float
+        key_name: L2_ActiveEnergyExport
+      - data_offset: 44
+        register_count: 4
+        data_type: float
+        key_name: L3_ActiveEnergyExport
+      - data_offset: 48
+        register_count: 4
+        data_type: float
+        key_name: GrandTotalReactiveEnergy
+      - data_offset: 52
+        register_count: 4
+        data_type: float
+        key_name: L1_TotalReactiveEnergy
+      - data_offset: 56
+        register_count: 4
+        data_type: float
+        key_name: L2_TotalReactiveEnergy
+      - data_offset: 60
+        register_count: 4
+        data_type: float
+        key_name: L3_TotalReactiveEnergy
+      - data_offset: 64
+        register_count: 4
+        data_type: float
+        key_name: TotalReactiveEnergyImport
+      - data_offset: 68
+        register_count: 4
+        data_type: float
+        key_name: L1_ReactiveEnergyImport
+      - data_offset: 72
+        register_count: 4
+        data_type: float
+        key_name: L2_ReactiveEnergyImport
+      - data_offset: 76
+        register_count: 4
+        data_type: float
+        key_name: L3_ReactiveEnergyImport
+      - data_offset: 80
+        register_count: 4
+        data_type: float
+        key_name: TotalReactiveEnergyExport
+      - data_offset: 84
+        register_count: 4
+        data_type: float
+        key_name: L1_ReactiveEnergyExport
+      - data_offset: 88
+        register_count: 4
+        data_type: float
+        key_name: L2_ReactiveEnergyExport
+      - data_offset: 92
+        register_count: 4
+        data_type: float
+        key_name: L3_ReactiveEnergyExport

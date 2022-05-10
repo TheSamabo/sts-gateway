@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::{thread::JoinHandle, collections::HashMap};
 use std::thread;
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 
 use crate::channels::DataPoint;
 use crate::definitions::{TimeseriesMessage, AttributeMessage, OneTelemetry};
@@ -9,11 +9,7 @@ use crate::{channels::{Channel, ChannelStatus}, definitions::AggregatorAction};
 
 use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
 
-use tokio::sync::Mutex;
-// use tokio_modbus::prelude::*;
-use libmodbus_rs::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, SerialMode, Timeout, RequestToSendMode};
-use tokio_serial::{DataBits, Parity, StopBits, SerialStream};
-use tokio;
+use libmodbus_rs::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, Timeout};
 #[derive(Debug)]
 pub struct ModbusRtuChannel {
     config: ModbusClientRtuConfig,
@@ -39,44 +35,46 @@ impl ModbusRtuChannel {
 
 
 impl Channel for ModbusRtuChannel {
-    fn run(mut self) -> JoinHandle<()>{
-        log::warn!("RTU CONFIG: {:?}", self);
+    fn run(self) -> JoinHandle<()>{
+        log::trace!("RTU CONFIG: {:?}", self);
 
-        let parity = match self.config.parity {
-            'E' => {
-                Parity::Even
-            },
-            'N' => {
-                Parity::None
-            },
-            'O' => {
-                Parity::Odd
-            },
-            _ => { 
-                log::error!("Unexpected parity character... defaulting to parity N");
-                Parity::None
-            }
-        };
+        // let parity = match self.config.parity {
+        //     'E' => {
+        //         Parity::Even
+        //     },
+        //     'N' => {
+        //         Parity::None
+        //     },
+        //     'O' => {
+        //         Parity::Odd
+        //     },
+        //     _ => { 
+        //         log::error!("Unexpected parity character... defaulting to parity N");
+        //         Parity::None
+        //     }
+        // };
 
-        let stop_bits = match self.config.stop_bits {
-            1 => StopBits::One,
-            2 => StopBits::Two,
-            _ => {
-                log::error!("Unexpected number of stopbits... defaulting to Stopbit::One");
-                StopBits::One
-            }
-        };
-        let data_bits = match self.config.data_bits {
-            5 => DataBits::Five,
-            6 => DataBits::Six,
-            7 => DataBits::Seven,
-            8 => DataBits::Eight,
-            _ => {
-                log::error!("Unexpected number of databits... defaulting to 8 data bits");
-                DataBits::Eight
-            }
-        };
-        let handle = thread::spawn(move || {
+        // let stop_bits = match self.config.stop_bits {
+        //     1 => StopBits::One,
+        //     2 => StopBits::Two,
+        //     _ => {
+        //         log::error!("Unexpected number of stopbits... defaulting to Stopbit::One");
+        //         StopBits::One
+        //     }
+        // };
+        // let data_bits = match self.config.data_bits {
+        //     5 => DataBits::Five,
+        //     6 => DataBits::Six,
+        //     7 => DataBits::Seven,
+        //     8 => DataBits::Eight,
+        //     _ => {
+        //         log::error!("Unexpected number of databits... defaulting to 8 data bits");
+        //         DataBits::Eight
+        //     }
+        // };
+        let builder = thread::Builder::new()
+            .name(self.config.name)
+            .spawn(move || {
             // let serial_stream = SerialStream::open(&serial_builder).unwrap();
             // let rt = tokio::runtime::Runtime::new().unwrap();
             // let tokio_handle = rt.handle();
@@ -100,14 +98,15 @@ impl Channel for ModbusRtuChannel {
             // modbus.set_debug(true);
             // modbus.rtu_set_serial_mode(SerialMode::RtuRS485).unwrap();
             // modbus.rtu_set_rts(RequestToSendMode::RtuRtsUp).unwrap();
-            modbus.set_byte_timeout(Timeout::new(1,5)).unwrap();
-            modbus.set_response_timeout(Timeout::new(1,60)).unwrap();
+            modbus.set_byte_timeout(Timeout::new(0,500000)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,500000)).unwrap();
             modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
 
             loop {
                 for (slave, reg_map) in &reg_maps {
                     // Set correct ModbusID to call on
                     // ctx.set_slave(Slave(slave.modbus_id));
+                    log::info!("Connecting to slave with id: {}",slave.modbus_id );
                     modbus.set_slave(slave.modbus_id).unwrap();
                     modbus.connect().unwrap();
 
@@ -127,7 +126,12 @@ impl Channel for ModbusRtuChannel {
                                 reg_group.elements_count,
                                 &mut read_buffer);
 
-                        let reg_response = match reg_response {
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                        }
+
+                        match reg_response {
                             Ok(res) => log::debug!("Read {:?} holding registers...", res ),
                             Err(e) => {
                                 log::error!("Error reading holding registers: {:?}", e);
@@ -160,7 +164,11 @@ impl Channel for ModbusRtuChannel {
                                 reg_group.elements_count,
                                 &mut read_buffer);
                         
-                        let reg_response = match reg_response {
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                        }
+                        match reg_response {
                             Ok(res) => log::debug!("Read {:?} holding registers...", res ),
                             Err(e) => {
                                 log::error!("Error reading holding registers: {:?}", e);
@@ -184,8 +192,8 @@ impl Channel for ModbusRtuChannel {
                 thread::sleep(Duration::from_millis(30000))
             }
                 
-        });
-        handle
+        }).unwrap();
+        builder
 
     }
 

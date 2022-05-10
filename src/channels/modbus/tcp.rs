@@ -39,7 +39,9 @@ impl ModbusTcpChannel {
 impl Channel for ModbusTcpChannel {
     fn run(mut self) -> JoinHandle<()> {
         self.status = ChannelStatus::Running;
-        let handle = thread::spawn(move || {
+        let builder = thread::Builder::new()
+            .name(self.config.name)
+            .spawn(move || {
 
             // Make connection to ModbusTCP server
             // let socket_full_string = format!("{}:{}", self.config.host ,self.config.port);
@@ -51,6 +53,7 @@ impl Channel for ModbusTcpChannel {
             let mut modbus = Modbus::new_tcp(&socket.ip().to_string(), socket.port() as i32).unwrap();
 
 
+            let aggregator = self.aggregator_tx.clone();
             // let mut socket_addr: SocketAddr = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 502);
             // if self.config.host.contains(":") {
             //     // let new_ip = std::net::Ipv6Addr::from_str(&self.config.host);
@@ -66,8 +69,8 @@ impl Channel for ModbusTcpChannel {
             // socket_addr.set_port(self.config.port);
             // let socket_addr = socket_addr.into();
             
-            modbus.set_byte_timeout(Timeout::new(1,500)).unwrap();
-            modbus.set_response_timeout(Timeout::new(1,6000)).unwrap();
+            modbus.set_byte_timeout(Timeout::new(0,500000)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,500000)).unwrap();
             modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
             loop { 
                 // log::info!("Sleeping for 20s");
@@ -80,7 +83,11 @@ impl Channel for ModbusTcpChannel {
                         Ok(_) => log::trace!("Switched to slave with id: {}", slave.modbus_id),
                         Err(e) => log::error!("Error switching to modbus slave id: {} error: {:?}", slave.modbus_id, e)
                     };
-                    modbus.connect();
+                    match modbus.connect() {
+                        Ok(_) => log::info!("Connected to slave with id: {}", slave.modbus_id),
+                        Err(e) => log::error!("Error connecting to slave with modbus id: {}, : {:?}",
+                        slave.modbus_id, e)
+                    }
 
                     let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
                     let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
@@ -92,13 +99,13 @@ impl Channel for ModbusTcpChannel {
 
                         // Call group 
                         log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                        }
                         match modbus.read_registers(reg_group.starting_address,reg_group.elements_count,&mut read_buffer) {
                             Ok(c) => {
                                 log::debug!("Success reading register group: {:?} return code: {}",reg_group, c);
-                                match modbus.flush() {
-                                    Ok(_) => log::debug!("Flushed untransmited data..."),
-                                    Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
-                                }
                             },
                             Err(e) => {
                                 log::error!("Error reading register group: {:?} return code: {}", reg_group, e);
@@ -127,16 +134,16 @@ impl Channel for ModbusTcpChannel {
                         match modbus.read_registers(reg_group.starting_address,reg_group.elements_count,&mut read_buffer) {
                             Ok(c) => {
                                 log::debug!("Success reading register group: {:?} return code: {}",reg_group, c);
-                                match modbus.flush() {
-                                    Ok(_) => log::debug!("Flushed untransmited data..."),
-                                    Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
-                                }
                             },
                             Err(e) => {
                                 log::error!("Error reading register group: {:?} return code: {}", reg_group, e);
-                                continue
+                                continue;
                             }
                         };
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                        }
 
                         for data_point in &reg_group.data_points {
                             let point = data_point.parse(read_buffer.clone());
@@ -149,7 +156,7 @@ impl Channel for ModbusTcpChannel {
                     }
                     // Disconnect
                     modbus.close();
-                    match self.aggregator_tx.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {
+                    match aggregator.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {
                         Err(e) => log::error!("Error sending data to aggregation thread! Did it panic? : {:#?}", e),
                         _ => {}
                     }
@@ -161,10 +168,10 @@ impl Channel for ModbusTcpChannel {
 
                     
             }
-        });
+        }).unwrap();
     
 
-        handle
+        builder
     }
 
     fn status(&self) ->  crate::channels::ChannelStatus {

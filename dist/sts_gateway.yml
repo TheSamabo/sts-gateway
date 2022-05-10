@@ -1,9 +1,9 @@
 name: Testing Gateway # Required
-log_config: ./dist/debug_log.yml # Required
+log_config: ./dist/logs.yml # Required
 mqtt:
   host: 87.197.189.92 # Required
   port: 50002  # Required
-  qos: 1    # Required
+  qos: 0    # Required
   tb_token: nacoheslo # Optional, This is standart way to authenticate to Thingsboard Cluster vie gateway API
 storage:
   type: sqlite

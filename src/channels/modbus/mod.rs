@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 use serde::Serialize;
-use tokio_serial::{DataBits, Parity, StopBits, FlowControl};
-use tokio_modbus::slave::Slave;
+// use tokio_serial::{DataBits, Parity, StopBits, FlowControl};
+// use tokio_modbus::slave::Slave;
 
 use serde_yaml::Error;
 use serde_yaml::from_str;
@@ -162,7 +162,7 @@ pub type ModbusSlaveId = u8;
 
 #[derive(Serialize, Deserialize ,Debug)]
 pub struct ModbusClientTcpConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub host: String,
     pub port: u16,
     pub slaves: Vec<ModbusSlave>
@@ -188,7 +188,7 @@ impl ChannelConfig for ModbusClientTcpConfig {
 // TODO: IMplemet Into trait for tokio_serial::SerialPortBuilder
 #[derive(Debug, Deserialize, Clone)]
 pub struct ModbusClientRtuConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub port: String,
     pub baudrate: u32,
     pub parity: char,
