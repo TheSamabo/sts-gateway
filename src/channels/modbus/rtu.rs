@@ -108,7 +108,7 @@ impl Channel for ModbusRtuChannel {
                     // ctx.set_slave(Slave(slave.modbus_id));
                     log::info!("Connecting to slave with id: {}",slave.modbus_id );
                     modbus.set_slave(slave.modbus_id).unwrap();
-                    modbus.connect().unwrap();
+                    modbus.connect().unwrap(); // UNSAFE , TODO: MAKE IT SAFE
 
                     let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
                     let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
