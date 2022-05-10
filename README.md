@@ -1,25 +1,30 @@
 # STS-Gateway
 
-(To be) Multi purpuse data gateway to other cluster or data aggregating/displaying systems.
-Its blaaaaazinly FAST, low memory footprint, single binary.
+Single binary program to read from industrial protocols and other *IoT*  protocols.
+Low memory usage, thanks to rust's ownership model.
+Fast...  very fast... 
 
+Currently it does not support any type of writing or passing messages to other via any implemented protocols.
+Read first. Right now the goal is to have *correct* and **fast** implementations of reading for industrial protocols. 
 ## This should not be used in production.
 Its still very experimental and most of the core features are subjects to change.
 
 ## Why?
-I needed **faster** implementation of modbus TCP/RTU and wanted some nice to have features. When dealing with a *IOT Edge* linux based devices
+I needed **faster** implementation of modbus TCP/RTU and wanted some nice to have features. When dealing with a *IOT Edge* linux based devices. My goal is to support other industrial protocols like: M-Bus, IEC62056-21...
+
 
 ## Key Features:
-- Modbus TCP
+- Modbus Client TCP/RTU
 - Sqlite Storage
 - Mqtt data export
 
 ## Features Planned: 
-- Full modbus implementation over TCP and Serial
-- Better read period configuration and scheduling
-- File Storage (Append only log) 
-- Other types of data exporting/sending
-- Auto create desired data folder
+- [x] Full modbus implementation over TCP and Serial
+- [] Better read period configuration and scheduling
+- [] File Storage (Append only log) 
+- [] Other types of data exporting/sending
+- [x] Auto create desired data folder
+- [] Documentation
 
 ## Dependencies
 If you staticaly compile this won't experiece any `libc` version problems
@@ -42,8 +47,9 @@ For logging we use Log4rs crate
 You should probably set `logging_config`  in root config(`sts_gateway.tml`) to `<path_to...>/logs.yml` 
 
 ### Modbus
-Tcp for now...
-In `modbus.yml` you can find basic configuration of multiple slaves and its corresponding register map
+TCP and RTU are both supported
+Keep in mind only function 3 or read holding registers is supported.
+In `modbus_rtu.yml` and `modbus_tcp.yml` you can find basic configuration of multiple slaves and its corresponding register map
 
 
 ## Acknowledgments
