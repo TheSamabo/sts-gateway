@@ -2,11 +2,11 @@ attributes:
   - starting_address: 0 # Starting register
     elements_count: 9 # Register to read
     data_points: 
-      - data_offset: 2 # Byte offset
+      - data_offset: 4 # Byte offset
         register_count: 1 # Bytes to read
         data_type: uint16
         key_name: ModbusID
-      - data_offset: 4 # Byte  offset
+      - data_offset: 6 # Byte  offset
         register_count: 1 # Bytes to read
         data_type: uint16
         key_name: Baudrate
