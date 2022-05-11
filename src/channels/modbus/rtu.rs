@@ -45,23 +45,22 @@ impl Channel for ModbusRtuChannel {
             let aggregator = self.aggregator_tx.clone();
             let reg_maps  = self.register_maps.clone();
 
-            let mut modbus = Modbus::new_rtu(
-                    &self.config.port,
-                    self.config.baudrate.try_into().unwrap(),
-                    self.config.parity,
-                    self.config.data_bits.into(),
-                    self.config.stop_bits.into()).unwrap();
 
             // modbus.set_debug(true);
             // modbus.rtu_set_serial_mode(SerialMode::RtuRS485).unwrap();
             // modbus.rtu_set_rts(RequestToSendMode::RtuRtsUp).unwrap();
-            modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
-            modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
-            modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
             
-            log::info!("Starting modbus rtu client: {:?}" ,modbus);
 
             loop {
+                let mut modbus = Modbus::new_rtu(
+                        &self.config.port,
+                        self.config.baudrate.try_into().unwrap(),
+                        self.config.parity,
+                        self.config.data_bits.into(),
+                        self.config.stop_bits.into()).unwrap();
+                modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
+                modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
+                modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
                 for (slave, reg_map) in &reg_maps {
                     // Set correct ModbusID to call on
                     // ctx.set_slave(Slave(slave.modbus_id));
@@ -157,6 +156,7 @@ impl Channel for ModbusRtuChannel {
                     }
                 }
                 modbus.close();
+                modbus.free();
                 thread::sleep(Duration::from_millis(10000))
             }
                 

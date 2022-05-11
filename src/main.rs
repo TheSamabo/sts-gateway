@@ -1,4 +1,4 @@
-
+#[forbid(unsafe_code)]
 
 use chrono_tz::Europe::Bratislava;
 use clap::Parser;
