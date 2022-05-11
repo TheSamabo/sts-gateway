@@ -58,6 +58,8 @@ impl Channel for ModbusRtuChannel {
             modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
             modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
             modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+            
+            log::info!("Starting modbus rtu client: {:?}" ,modbus);
 
             loop {
                 for (slave, reg_map) in &reg_maps {
@@ -70,7 +72,7 @@ impl Channel for ModbusRtuChannel {
                         Err(e) => {
                             log::error!("Error connecting to slave with id {} on serial line: {} - error {:?}"
                             ,slave.modbus_id, self.config.port, e);
-                            modbus.close();
+                            // modbus.close();
                             continue;
                         }
                     };
@@ -154,7 +156,8 @@ impl Channel for ModbusRtuChannel {
                         _ => {}
                     }
                 }
-                thread::sleep(Duration::from_millis(30000))
+                modbus.close();
+                thread::sleep(Duration::from_millis(10000))
             }
                 
         }).unwrap();
