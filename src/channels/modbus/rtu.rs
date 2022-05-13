@@ -60,31 +60,37 @@ impl Channel for ModbusRtuChannel {
                 modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
                 modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
                 modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+                
+                // File descriptor slave
+                // key: modbus_id
+                // value: descriptor id
+                let mut fds: HashMap<u8, i32> = HashMap::new();
                 loop {
 
-                    for (slave, reg_map) in reg_maps {
+                    for (slave, reg_map) in &reg_maps {
                         // Set correct ModbusID to call on
                         // ctx.set_slave(Slave(slave.modbus_id));
                         log::info!("Connecting to slave with id: {}",slave.modbus_id );
-                        modbus.set_slave(slave.modbus_id).unwrap();
+                        log::debug!("Filedescriptor Slaves Hashmap: {:?}", fds);
+                        match fds.get(&slave.modbus_id) {
+                            Some(f) => {
+                                log::debug!("Found existing file descriptor for slave {} ", slave.modbus_id);
+                                modbus.set_socket(*fds.get(&slave.modbus_id).unwrap()).unwrap();
+                                modbus.set_slave(slave.modbus_id).unwrap();
+                            },
+                            _ => {}
+                        };
                         match modbus.connect() {
                             Ok(_) => {
                                 let fd = modbus.get_socket().unwrap();
+                                if fds.get(&slave.modbus_id).is_none() {
+                                    fds.insert(slave.modbus_id.clone(), fd);
+                                }
                                 log::info!("Connected to slave {} on File Descriptor: {}", slave.modbus_id, fd);
                             },
                             Err(e) => {
                                 log::error!("Error connecting to slave with id {} on serial line: {} - error {:?}"
                                 ,slave.modbus_id, self.config.port, e);
-                                // drop(modbus);
-                                // modbus = Modbus::new_rtu(
-                                //         &self.config.port,
-                                //         self.config.baudrate.try_into().unwrap(),
-                                //         self.config.parity,
-                                //         self.config.data_bits.into(),
-                                //         self.config.stop_bits.into()).unwrap();
-                                // modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
-                                // modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
-                                // modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
                                 thread::sleep(Duration::from_millis(1000));
                                 // modbus.close();
                                 continue;
@@ -128,8 +134,8 @@ impl Channel for ModbusRtuChannel {
                             }
 
                             log::info!("Read and parsed register group with data {} points", data_point_vec.len());
-                            log::debug!("Datapoints in reg group: {:?}", data_point_vec);
-                            log::debug!("Attribute message: {:?}", attributes_message)
+                            log::trace!("Datapoints in reg group: {:?}", data_point_vec);
+                            log::trace!("Attribute message: {:?}", attributes_message)
 
                         }
                         // Read Timeseries
@@ -165,7 +171,7 @@ impl Channel for ModbusRtuChannel {
                             
 
                             log::info!("Read and parsed register group with data {} points", data_point_vec.len());
-                            log::debug!("Datapoints in reg group: {:?}", data_point_vec);
+                            log::trace!("Datapoints in reg group: {:?}", data_point_vec);
                             timeseries_message.1.push(OneTelemetry::from(data_point_vec))
                         }
                         match aggregator.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {

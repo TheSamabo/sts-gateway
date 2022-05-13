@@ -154,7 +154,7 @@ pub struct ModbusSlave {
     pub device_type: Option<String>,
     pub modbus_id: ModbusSlaveId,
     pub register_map: String,
-    pub file_descriptor: Option<i32>
+    // pub file_descriptor: Option<i32>
 
 }
 
