@@ -60,11 +60,21 @@ impl Channel for ModbusRtuChannel {
                 modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
                 modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
                 modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+
+
                 
                 // File descriptor slave
                 // key: modbus_id
                 // value: descriptor id
                 let mut fds: HashMap<u8, i32> = HashMap::new();
+                // if reg_maps.len() < 1000 {
+                //     let mut i = 1;
+                //     for (slave,reg_map) in &reg_maps {
+                //         fds.insert(slave.modbus_id.clone(), i  );
+                //         i += 1;
+                //     };
+                // }
+                log::debug!("FDS: {:?}", fds);
                 loop {
 
                     for (slave, reg_map) in &reg_maps {
@@ -72,20 +82,21 @@ impl Channel for ModbusRtuChannel {
                         // ctx.set_slave(Slave(slave.modbus_id));
                         log::info!("Connecting to slave with id: {}",slave.modbus_id );
                         log::debug!("Filedescriptor Slaves Hashmap: {:?}", fds);
-                        match fds.get(&slave.modbus_id) {
-                            Some(f) => {
-                                log::debug!("Found existing file descriptor for slave {} ", slave.modbus_id);
-                                modbus.set_socket(*fds.get(&slave.modbus_id).unwrap()).unwrap();
-                                modbus.set_slave(slave.modbus_id).unwrap();
-                            },
-                            _ => {}
-                        };
+                        // match fds.get(&slave.modbus_id) {
+                            // Some(f) => {
+                                // log::debug!("Found existing file descriptor for slave {} ", slave.modbus_id);
+                        modbus.set_socket(slave.modbus_id.into()).unwrap();
+                        modbus.set_slave(slave.modbus_id).unwrap();
+                            // },
+                            // None => {
+                            // }
+                        // };
                         match modbus.connect() {
                             Ok(_) => {
                                 let fd = modbus.get_socket().unwrap();
-                                if fds.get(&slave.modbus_id).is_none() {
-                                    fds.insert(slave.modbus_id.clone(), fd);
-                                }
+                                // if fds.get(&slave.modbus_id).is_none() {
+                                    // fds.insert(slave.modbus_id.clone(), fd);
+                                // }
                                 log::info!("Connected to slave {} on File Descriptor: {}", slave.modbus_id, fd);
                             },
                             Err(e) => {

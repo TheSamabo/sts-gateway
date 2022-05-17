@@ -1,5 +1,5 @@
 name: Testing Gateway # Required
-log_config: ./dist/logs.yml # Required
+log_config: ./dist/debug_log.yml # Required
 mqtt:
   host: 87.197.189.92 # Required
   port: 50002  # Required
@@ -20,7 +20,7 @@ storage:
 
 
 channels: # Required
-  - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu
-    file: ./dist/modbus_tcp.yml # Required
-  # - type: modbus_rtu # Required Options: modbus_tcp , modbus_rtu
-    # file: ./dist/modbus_rtu.yml # Required
+  # - type: modbus_tcp # Required Options: modbus_tcp , modbus_rtu
+    # file: ./dist/modbus_tcp.yml # Required
+  - type: modbus_rtu # Required Options: modbus_tcp , modbus_rtu
+    file: ./dist/modbus_rtu.yml # Required

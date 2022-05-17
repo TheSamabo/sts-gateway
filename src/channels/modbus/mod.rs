@@ -68,7 +68,7 @@ impl ModbusDataPointReader {
     pub fn  parse(&self, data: Vec<u16>) -> DataPoint{
         // let (first, second, third) = dbg!(data.align_to::<u8>());
 
-        log::debug!("Incommint Vec<u16>: {:?}", data);
+        log::trace!("Incommint Vec<u16>: {:?}", data);
         log::trace!("Data offset: {}", self.data_offset);
         let mut buff = ByteBuffer::new();
         for word in data {
