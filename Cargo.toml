@@ -10,7 +10,7 @@ license = "MPL 2.0"
 
 [dependencies]
 #tokio-modbus = { version ="^0.5" , features = ["sync", "tcp", "rtu"] }
-libmodbus-rs = "^0.8"
+libmodbus = { git = "https://github.com/zzeroo/libmodbus-rs.git", commit= "46f7d78d8ec40765bd537215a89eafacdcbd6eca"}
 #tokio-serial = "^5.4"
 #tokio = { version = "^1.17", features = ["macros", "rt-multi-thread"]}
 serde = { version = "*", features = ["derive"]}

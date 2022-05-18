@@ -8,7 +8,7 @@ use std::{sync::mpsc, thread::JoinHandle};
 use std::thread;
 use std::time::Duration;
 // use tokio_modbus::prelude::*;
-use libmodbus_rs::{Modbus, ModbusClient, ModbusTCP, Timeout, ErrorRecoveryMode};
+use libmodbus::{Modbus, ModbusClient, ModbusTCP, Timeout, ErrorRecoveryMode};
 // use tokio;
 
 use crate::definitions::{AttributeMessage, TimeseriesMessage};

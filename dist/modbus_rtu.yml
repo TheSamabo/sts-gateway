@@ -1,5 +1,5 @@
 name: ModbusChannel2 # Required
-port: /dev/ttyS1 # Required
+port: /dev/ttyUSB0 # Required
 baudrate: 9600 # Required
 parity: 'E' # Required
 data_bits: 8 # Required

@@ -9,7 +9,7 @@ use crate::{channels::{Channel, ChannelStatus}, definitions::AggregatorAction};
 
 use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
 
-use libmodbus_rs::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, Timeout};
+use libmodbus::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, Timeout};
 #[derive(Debug)]
 pub struct ModbusRtuChannel {
     config: ModbusClientRtuConfig,
@@ -57,9 +57,9 @@ impl Channel for ModbusRtuChannel {
                         self.config.parity,
                         self.config.data_bits.into(),
                         self.config.stop_bits.into()).unwrap();
-                modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
-                modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
-                modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+                // modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
+                // modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
+                // modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
 
 
                 
@@ -75,6 +75,10 @@ impl Channel for ModbusRtuChannel {
                 //     };
                 // }
                 log::debug!("FDS: {:?}", fds);
+                while let Err(e) = modbus.connect() {
+                    log::error!("Error connecting to serial line: {:?}", self.config.port);
+                    thread::sleep(Duration::from_millis(1000));
+                };
                 loop {
 
                     for (slave, reg_map) in &reg_maps {
@@ -85,28 +89,15 @@ impl Channel for ModbusRtuChannel {
                         // match fds.get(&slave.modbus_id) {
                             // Some(f) => {
                                 // log::debug!("Found existing file descriptor for slave {} ", slave.modbus_id);
-                        modbus.set_socket(slave.modbus_id.into()).unwrap();
+                        // modbus.set_socket(slave.modbus_id.into()).unwrap();
                         modbus.set_slave(slave.modbus_id).unwrap();
-                            // },
-                            // None => {
-                            // }
-                        // };
-                        match modbus.connect() {
-                            Ok(_) => {
-                                let fd = modbus.get_socket().unwrap();
-                                // if fds.get(&slave.modbus_id).is_none() {
-                                    // fds.insert(slave.modbus_id.clone(), fd);
-                                // }
-                                log::info!("Connected to slave {} on File Descriptor: {}", slave.modbus_id, fd);
+                        match  modbus.get_socket() {
+                            Ok(fd) => {
+                                log::info!("Connected  to slave with id : {:?}, on file descriptor: {:?}",
+                                slave.modbus_id, fd);
                             },
-                            Err(e) => {
-                                log::error!("Error connecting to slave with id {} on serial line: {} - error {:?}"
-                                ,slave.modbus_id, self.config.port, e);
-                                thread::sleep(Duration::from_millis(1000));
-                                // modbus.close();
-                                continue;
-                            }
-                        };
+                            Err(e) => log::error!("Error getting file descriptor for slave with id: {:?}", slave.modbus_id)
+                        }
 
                         let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
                         let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
@@ -190,7 +181,7 @@ impl Channel for ModbusRtuChannel {
                             _ => {}
                         }
                     }
-                    modbus.close();
+                    // modbus.close();
                     thread::sleep(Duration::from_millis(10000))
                 }
                 
