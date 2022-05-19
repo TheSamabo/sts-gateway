@@ -9,7 +9,7 @@ slaves: # Required
     device_type: ElectricityMeter # Optional, currently not used
     modbus_id: 1 # Required
     register_map: ./dist/register_maps/F&F_LE-03MW-CT.yml # Required
-  - device_name: Meter2 # Required
-    device_type: ElectricityMeter # Optional, currently not used
-    modbus_id: 2 # Required
-    register_map: ./dist/register_maps/F&F_LE-03MW-CT.yml # Required
+  # - device_name: Meter2 # Required
+  #   device_type: ElectricityMeter # Optional, currently not used
+  #   modbus_id: 2 # Required
+  #   register_map: ./dist/register_maps/F&F_LE-03MW-CT.yml # Required

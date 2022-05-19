@@ -1,3 +1,4 @@
+use std::io::{ErrorKind, Write, Read};
 use std::time::Duration;
 use std::{thread::JoinHandle, collections::HashMap};
 use std::thread;
@@ -9,7 +10,7 @@ use crate::{channels::{Channel, ChannelStatus}, definitions::AggregatorAction};
 
 use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
 use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
-use serialport;
+use serialport::{self, SerialPort};
 // use libmodbus::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, Timeout};
 #[derive(Debug)]
 pub struct ModbusRtuChannel {
@@ -70,11 +71,11 @@ impl Channel for ModbusRtuChannel {
                 let mut reg_maps  = self.register_maps.clone();
             
                 log::debug!("Opening serial port: {:?}", self.config.port);
-                let builder = serialport::new(self.config.port, self.config.baudrate);
+                let builder = serialport::new(self.config.port.clone(), self.config.baudrate);
                 let builder = builder.timeout(Duration::from_secs(1));
                 let builder = builder.data_bits(databits);
                 let builder = builder.parity(parity);
-                let port = builder.open().expect(&format!("Could not open serial port: {:?}", self.config.port));
+                let mut port = builder.open_native().expect(&format!("Could not open serial port: {:?}", self.config.port.clone()));
                 // log::debug!("Creating RTU Context");
                 
                 // let mut modbus = Modbus::new_rtu(
@@ -108,7 +109,6 @@ impl Channel for ModbusRtuChannel {
                 loop {
 
                     for (slave, reg_map) in &reg_maps {
-                        let mut mreq = ModbusRequest::new(slave.modbus_id, ModbusProto::Rtu);
 
 
 
@@ -134,10 +134,15 @@ impl Channel for ModbusRtuChannel {
                         // Read Attributes 
                         for reg_group in &reg_map.attributes {
                             
-                            let mut read_buffer =  vec![0u16; 200];
+                            let mut mreq = ModbusRequest::new(slave.modbus_id, ModbusProto::Rtu);
+                            let mut read_buffer =  Vec::new();
                             let mut request = Vec::new();
 
                             let mut data_point_vec: Vec<DataPoint> = vec![];
+                            match port.clear(serialport::ClearBuffer::All) {
+                                Err(e) => log::error!("Error clearing buffers! {:?}", e),
+                                _ => ()
+                            }
 
                             // Call group 
                             log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
@@ -145,38 +150,113 @@ impl Channel for ModbusRtuChannel {
                             match mreq.generate_get_holdings(
                                 reg_group.starting_address, reg_group.elements_count, &mut request) {
 
-                                Err(e) => log::error!("Error creating read holding request: {:?}", e),
+                                Err(e) => {
+                                    log::error!("Error creating read holding request: {:?}", e);
+                                    continue;
+                                },
                                 Ok(_) => log::debug!("Created read holding registers request...")
                             }
-                            port.write(&request).unwrap();
+                            match port.write(&request) {
+                                Ok(_) => {
+                                    log::debug!("Send request to read holding registers...");
+                                    if port.flush().is_err() {log::warn!("Error flush write buffer...")};
+                                },
+                                Err(e) => {
+                                    log::error!("Could not send request for holding registers: {:?}", e);
+                                    continue;
+                                }
+                            }
                             // Possible timeout window
-                            let mut buf = [0u8, 10];
-                            port.read(&mut buf).unwrap();
-
+                            let mut buf = [0,0,0,0,0,0,0,0,0,0];
+                            match port.read_exact(&mut buf) {
+                                Ok(_) => log::debug!("read first response correctly"),
+                                Err(e) => {
+                                    match port.clear(serialport::ClearBuffer::Input) {
+                                        Err(e) => log::error!("Error clearing input buffer! {:?}", e),
+                                        _ => ()
+                                    }
+                                    match e.kind() {
+                                        ErrorKind::TimedOut => {
+                                            log::warn!("Operation to read first response timedout");
+                                            continue;
+                                        },
+                                        _ => {
+                                            log::error!("Error reading first response: {:?}",e );
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                            match port.clear(serialport::ClearBuffer::Input) {
+                                Err(e) => log::error!("Error clearing input buffer! {:?}", e),
+                                _ => ()
+                            }
+                            log::trace!("From serial read this buffer: {:?}", buf);
                             let len = guess_response_frame_len(&buf, ModbusProto::Rtu);
                             let mut response = Vec::new();
                             response.extend_from_slice(&buf);
                             match len {
-                                Err(e) => log::error!("Error guessing response frame len: {:?}", e),
+                                Err(e) => {
+                                    log::error!("Error guessing response frame len: {:?}", e);
+                                    match port.clear(serialport::ClearBuffer::Input) {
+                                        Err(e) => log::error!("Error clearing input buffer! {:?}", e),
+                                        _ => ()
+                                    }
+                                    continue;
+                                },
                                 Ok(i) => {
                                     if i > 10{
                                         let mut rest = vec![0u8; (i - 10) as usize];
-                                        port.read_exact(&mut rest).unwrap();
+                                        match port.read_exact(&mut rest) {
+                                            Ok(_) => {
+                                                log::debug!("read first response correctly");
+                                                match port.clear(serialport::ClearBuffer::Input) {
+                                                    Err(e) => log::error!("Error clearing input buffer! {:?}", e),
+                                                    _ => ()
+                                                }
+
+                                            },
+                                            Err(e) => 
+                                            {
+                                                match port.clear(serialport::ClearBuffer::Input) {
+                                                    Err(e) => log::error!("Error clearing input buffer! {:?}", e),
+                                                    _ => ()
+                                                }
+                                                match e.kind() {
+                                                    ErrorKind::TimedOut => {
+                                                        log::warn!("Operation to read first response timedout");
+                                                        continue;
+                                                    }
+                                                    _ => {
+                                                        log::error!("Error reading first response: {:?}",e );
+                                                        continue;
+                                                    }
+                                                }
+                                            }
+                                        }
                                         response.extend(rest);
                                     }
                                 }
                             }
-                            let mut read_buffer = Vec::new();
+                            log::trace!("Checking response: {:?}", response);
+                            // let mut read_buffer = Vec::new();
                             match mreq.parse_ok(&response) {
                                 Ok(_) => {
                                     log::debug!("Modbus response is OK");
-                                    match mreq.parse_u16(&buf, &mut read_buffer) {
+                                    match mreq.parse_u16(&response, &mut read_buffer) {
                                         Ok(_) => log::info!("successfully extracted data from response!"),
-                                        Err(e) => log::error!("Error extracting data from response: {:?}", e)
+                                        Err(e) => {
+                                            log::error!("Error extracting data from response: {:?}", e);
+                                            continue;
+                                        }
                                     };
                                 },
-                                Err(e) => log::error!("Error in modbus response: {:?}", e)
+                                Err(e) => {
+                                    log::error!("Error in modbus response: {:?}", e);
+                                    continue;
+                                }
                             };
+                            log::trace!("Read Raw data: {:?}", read_buffer);
 
 
 
@@ -211,30 +291,172 @@ impl Channel for ModbusRtuChannel {
 
                         }
                         // Read Timeseries
+                        // thread::sleep(Duration::from_millis(100));
                         for reg_group in &reg_map.timeseries {
-                            
-                            let mut read_buffer = vec![0u16; 200];
+
+                            let mut mreq = ModbusRequest::new(slave.modbus_id, ModbusProto::Rtu);
+                            let mut read_buffer =  Vec::new();
+                            let mut request = Vec::new();
 
                             let mut data_point_vec: Vec<DataPoint> = vec![];
 
                             // Call group 
-                            log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
-                            let reg_response = modbus.read_registers(
-                                    reg_group.starting_address,
-                                    reg_group.elements_count,
-                                    &mut read_buffer);
-                            
-                            match modbus.flush() {
-                                Ok(_) => log::debug!("Flushed untransmited data..."),
-                                Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                            log::info!("Reading starting address: {:}, and register count: {:} of slave with id: {:?}", reg_group.starting_address, reg_group.elements_count, slave.modbus_id);
+                            match port.clear(serialport::ClearBuffer::All) {
+                                Err(e) => log::error!("Error clearing output buffer! {:?}", e),
+                                _ => ()
                             }
-                            match reg_response {
-                                Ok(res) => log::debug!("Read {:?} holding registers...", res ),
+                            
+                            match mreq.generate_get_holdings(
+                                reg_group.starting_address, reg_group.elements_count, &mut request) {
+
+                                Err(e) => log::error!("Error creating read holding request: {:?}", e),
+                                Ok(_) => log::debug!("Created read holding registers request...")
+                            }
+                            match port.write(&request) {
+                                Ok(_) => {
+                                    log::debug!("Send request to read holding registers...");
+                                    if port.flush().is_err() {log::warn!("Error flush write buffer...")};
+                                },
                                 Err(e) => {
-                                    log::error!("Error reading holding registers: {:?}", e);
-                                    continue
+                                    log::error!("Could not send request for holding registers: {:?}", e);
+                                    continue;
                                 }
+                            }
+                            // Possible timeout window
+                            let mut buf = [0,0,0,0,0,0,0,0,0,0];
+                            match port.read_exact(&mut buf) {
+                                Ok(_) => log::debug!("read first response correctly"),
+                                Err(e) => match e.kind() {
+                                    ErrorKind::TimedOut => {
+                                        log::warn!("Operation to read first response timedout");
+                                        continue;
+                                    }
+                                    _ => {
+                                        log::error!("Error reading first response: {:?}",e );
+                                        continue;
+                                    }
+                                }
+                            }
+                            log::trace!("From serial read this buffer: {:?}", buf);
+                            let len = guess_response_frame_len(&buf, ModbusProto::Rtu);
+                            let mut response = Vec::new();
+                            response.extend_from_slice(&buf);
+                            match len {
+                                Err(e) => {
+                                    log::error!("Error guessing response frame len: {:?}", e);
+                                    continue;
+                                },
+                                Ok(i) => {
+                                    if i > 10{
+                                        let mut rest = vec![0u8; (i - 10) as usize];
+                                        match port.read_exact(&mut rest) {
+                                            Ok(_) => log::debug!("read first response correctly"),
+                                            Err(e) => match e.kind() {
+                                                ErrorKind::TimedOut => {
+                                                    log::warn!("Operation to read first response timedout");
+                                                    continue;
+                                                }
+                                                _ => {
+                                                    log::error!("Error reading first response: {:?}",e );
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                        response.extend(rest);
+                                    }
+                                }
+                            }
+                            log::trace!("Checking response: {:?}", response);
+                            // let mut read_buffer = Vec::new();
+                            match mreq.parse_ok(&response) {
+                                Ok(_) => {
+                                    log::debug!("Modbus response is OK");
+                                    match mreq.parse_u16(&response, &mut read_buffer) {
+                                        Ok(_) => log::info!("successfully extracted data from response!"),
+                                        Err(e) => {
+                                            log::error!("Error extracting data from response: {:?}", e);
+                                            continue;
+                                        }
+                                    };
+                                },
+                                Err(e) => {
+                                    log::error!("Error in modbus response: {:?}", e);
+                                    continue;
+                                }
+                          
                             };
+                            log::trace!("Read Raw data: {:?}", read_buffer);
+
+
+
+                            // OLD
+                            
+                            // let mut mreq = ModbusRequest::new(slave.modbus_id, ModbusProto::Rtu);
+                            // let mut read_buffer = Vec::new();
+                            // let mut request = Vec::new();
+
+                            // let mut data_point_vec: Vec<DataPoint> = vec![];
+
+                            // // Call group 
+                            
+                            // match mreq.generate_get_holdings(
+                            //     reg_group.starting_address, reg_group.elements_count, &mut request) {
+
+                            //     Err(e) => log::error!("Error creating read holding request: {:?}", e),
+                            //     Ok(_) => log::debug!("Created read holding registers request...")
+                            // }
+                            // port.clear(serialport::ClearBuffer::All).unwrap();
+                            // port.write(&request).unwrap();
+                            // // Possible timeout window
+                            // let mut buf = [0,0,0,0,0,0,0,0,0,0];
+                            // port.read(&mut buf).unwrap();
+                            // log::trace!("From serial read this buffer: {:?}", buf);
+                            
+
+                            // let len = guess_response_frame_len(&buf, ModbusProto::Rtu);
+                            // let mut response = Vec::new();
+                            // response.extend_from_slice(&buf);
+                            // match len {
+                            //     Err(e) => log::error!("Error guessing response frame len: {:?}", e),
+                            //     Ok(i) => {
+                            //         if i > 10{
+                            //             let mut rest = vec![0u8; (i - 10) as usize];
+                            //             port.read_exact(&mut rest).unwrap();
+                            //             response.extend(rest);
+                            //         }
+                            //     }
+                            // }
+                            // // let mut read_buffer = Vec::new();
+                            // match mreq.parse_ok(&response) {
+                            //     Ok(_) => {
+                            //         log::debug!("Modbus response is OK");
+                            //         match mreq.parse_u16(&response, &mut read_buffer) {
+                            //             Ok(_) => log::info!("successfully extracted data from response!"),
+                            //             Err(e) => log::error!("Error extracting data from response: {:?}", e)
+                            //         };
+                            //     },
+                            //     Err(e) => log::error!("Error in modbus response: {:?}", e)
+                            // };
+                            // log::trace!("Read Raw data: {:?}", read_buffer);
+
+                            // log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
+                            // let reg_response = modbus.read_registers(
+                            //         reg_group.starting_address,
+                            //         reg_group.elements_count,
+                            //         &mut read_buffer);
+                            
+                            // match modbus.flush() {
+                            //     Ok(_) => log::debug!("Flushed untransmited data..."),
+                            //     Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                            // }
+                            // match reg_response {
+                            //     Ok(res) => log::debug!("Read {:?} holding registers...", res ),
+                            //     Err(e) => {
+                            //         log::error!("Error reading holding registers: {:?}", e);
+                            //         continue
+                            //     }
+                            // };
 
                             for data_point in &reg_group.data_points {
                                 let point = data_point.parse(read_buffer.clone());
@@ -244,15 +466,18 @@ impl Channel for ModbusRtuChannel {
 
                             log::info!("Read and parsed register group with data {} points", data_point_vec.len());
                             log::trace!("Datapoints in reg group: {:?}", data_point_vec);
-                            timeseries_message.1.push(OneTelemetry::from(data_point_vec))
+                            timeseries_message.1.push(OneTelemetry::from(data_point_vec));
                         }
+
                         match aggregator.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {
                             Err(e) => log::error!("Error sending data to aggregation thread! Did it panic? : {:#?}", e),
                             _ => {}
                         }
                     }
+
+                    
                     // modbus.close();
-                    thread::sleep(Duration::from_millis(10000))
+                    thread::sleep(Duration::from_millis(10000));
                 }
                 
         }).unwrap();
