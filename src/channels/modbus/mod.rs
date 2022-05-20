@@ -65,7 +65,7 @@ pub struct ModbusDataPointReader {
 }
 
 impl ModbusDataPointReader {
-    pub fn  parse(&self, data: Vec<u16>) -> DataPoint{
+    pub fn  parse(&self, data: Vec<u16>) -> Option<DataPoint>{
         // let (first, second, third) = dbg!(data.align_to::<u8>());
 
         log::trace!("Incommint Vec<u16>: {:?}", data);
@@ -81,64 +81,83 @@ impl ModbusDataPointReader {
         match self.data_type {
             ModbusDataType::Float => {
                 // Float =  32bits /  2 registers
-
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_f32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
                     
 
             },
             ModbusDataType::Double => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 8) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_f64();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
             },
             ModbusDataType::Int32 => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_i32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
 
             },
             ModbusDataType::UInt32 => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_u32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
 
             },
             ModbusDataType::UInt16 => {
                 buff.set_rpos(min(self.data_offset, buff.len()));
+                if !((self.data_offset + 2) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_u16();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
             }
             _ => {
                 todo!()

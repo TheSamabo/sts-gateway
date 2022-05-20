@@ -9,6 +9,7 @@ use crate::definitions::{TimeseriesMessage, AttributeMessage, OneTelemetry};
 use crate::{channels::{Channel, ChannelStatus}, definitions::AggregatorAction};
 
 use super::{ModbusClientRtuConfig, ModbusSlave, ModbusRegisterMap};
+use bytebuffer::ByteBuffer;
 use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
 use serialport::{self, SerialPort};
 // use libmodbus::{ModbusClient, Modbus,  ModbusRTU, ErrorRecoveryMode, Timeout};
@@ -277,12 +278,22 @@ impl Channel for ModbusRtuChannel {
                             //         continue
                             //     }
                             // };
+                            let mut buff = ByteBuffer::new();
+                            for word in read_buffer.clone() {
+                                buff.write_u16(word);
+                            }
+
 
                             for data_point in &reg_group.data_points {
-                                let point = data_point.parse(read_buffer.clone());
-                                data_point_vec.push(point.clone());
+                                match data_point.parse(read_buffer.clone()) {
+                                    Some(point) => {
+
+                                        data_point_vec.push(point.clone());
+                                        attributes_message.1.insert(point.key, point.value);
+                                    },
+                                    None => continue
+                                }
                                 // parse into message
-                                attributes_message.1.insert(point.key, point.value);
                             }
 
                             log::info!("Read and parsed register group with data {} points", data_point_vec.len());
@@ -459,8 +470,13 @@ impl Channel for ModbusRtuChannel {
                             // };
 
                             for data_point in &reg_group.data_points {
-                                let point = data_point.parse(read_buffer.clone());
-                                data_point_vec.push(point);
+                                match  data_point.parse(read_buffer.clone()) {
+                                    Some(point) => {
+                                        data_point_vec.push(point);
+
+                                    },
+                                    None => continue
+                                }
                             }
                             
 
