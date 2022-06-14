@@ -1,4 +1,4 @@
-
+#[forbid(unsafe_code)]
 
 use chrono_tz::Europe::Bratislava;
 use clap::Parser;
@@ -40,8 +40,8 @@ mod aggregator;
 // we will compare the hashes and determine which part of the gateway to reload
 
 
-#[tokio::main]
-async fn main() {
+// #[tokio::main]
+fn main() {
 
     // Read arguments if no arguments panic 
     let args = definitions::MainArguments::parse();

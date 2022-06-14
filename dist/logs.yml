@@ -11,7 +11,7 @@ appenders:
     kind: rolling_file
     path: "/var/log/sts-gateway/main.log"
     encoder:
-      pattern: "{d} - {m}{n}"
+      pattern: "{d} {h({l})} - {m} - LINE: {L}{n}"
     policy:
       trigger:
         kind: size
@@ -21,6 +21,62 @@ appenders:
         base: 1
         count: 4
         pattern: "/var/log/sts-gateway/main{}.log"
+  transport:
+    kind: rolling_file
+    path: "/var/log/sts-gateway/transport.log"
+    encoder:
+      pattern: "{d} {h({l})} - {m} - LINE: {L}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 4
+        pattern: "/var/log/sts-gateway/transport{}.log"
+  storage:
+    kind: rolling_file
+    path: "/var/log/sts-gateway/storage.log"
+    encoder:
+      pattern: "{d} {h({l})} - {m} - LINE: {L}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 4
+        pattern: "/var/log/sts-gateway/storage{}.log"
+  channels:
+    kind: rolling_file
+    path: "/var/log/sts-gateway/channels.log"
+    encoder:
+      pattern: "{d} {h({l})} {M} - {m} - LINE: {L}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 4
+        pattern: "/var/log/sts-gateway/channels{}.log"
+  aggregator:
+    kind: rolling_file
+    path: "/var/log/sts-gateway/aggregator.log"
+    encoder:
+      pattern: "{d} {h({l})} - {m} - LINE: {L}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 4
+        pattern: "/var/log/sts-gateway/aggregator{}.log"
 
 # Set the default logging level to "warn" and attach the "stdout" appender to the root
 root:
@@ -30,8 +86,29 @@ root:
 
 loggers:
   # Raise the maximum log level for events sent to the "app::backend::db" logger to "info"
-  sts-gateway::main:
-    level: info
+  sts_gateway:
+    level: debug
     appenders:
       - main
     additive: false
+  sts_gateway::transport:
+    level: trace
+    appenders:
+      - transport
+    additive: false
+  sts_gateway::storage:
+    level: trace
+    appenders:
+      - storage
+    additive: false
+  sts_gateway::channels:
+    level: info
+    appenders:
+      - channels
+    additive: false
+  sts_gateway::aggregator:
+    level: trace
+    appenders:
+      - aggregator
+    additive: false
+    

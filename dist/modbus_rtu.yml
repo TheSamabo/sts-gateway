@@ -1,11 +1,15 @@
-name: ModbusChannel2
-port: /dev/ttyUSB0 # Works even with IPV6, Required
+name: ModbusChannel2 # Required
+port: /dev/ttyUSB0 # Required
 baudrate: 9600 # Required
-parity: 'E'
-data_bits: 8
-stop_bits: 1
+parity: 'E' # Required
+data_bits: 8 # Required
+stop_bits: 1 # Required
 slaves: # Required
   - device_name: Meter1 # Required
-    device_type: ElectricityMeter # Optional
+    device_type: ElectricityMeter # Optional, currently not used
     modbus_id: 1 # Required
     register_map: ./dist/register_maps/F&F_LE-03MW-CT.yml # Required
+  # - device_name: Meter2 # Required
+  #   device_type: ElectricityMeter # Optional, currently not used
+  #   modbus_id: 2 # Required
+  #   register_map: ./dist/register_maps/F&F_LE-03MW-CT.yml # Required

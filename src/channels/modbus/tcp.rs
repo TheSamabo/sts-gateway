@@ -1,13 +1,15 @@
-use crate::channels::{Channel, ChannelConfig, ChannelStatus, DataPoint};
+use crate::channels::{Channel, ChannelStatus, DataPoint};
 use crate::definitions::{AggregatorAction, OneTelemetry};
 
 use super::{ModbusClientTcpConfig, ModbusRegisterMap, ModbusSlave};
 use std::collections::HashMap;
-use std::net::{SocketAddr, ToSocketAddrs, Ipv4Addr, IpAddr};
+use std::net::{SocketAddr, IpAddr};
 use std::{sync::mpsc, thread::JoinHandle};
 use std::thread;
 use std::time::Duration;
-use tokio_modbus::prelude::*;
+use bytebuffer::ByteBuffer;
+// use tokio_modbus::prelude::*;
+use libmodbus_rs::{Modbus, ModbusClient, ModbusTCP, Timeout, ErrorRecoveryMode};
 // use tokio;
 
 use crate::definitions::{AttributeMessage, TimeseriesMessage};
@@ -38,7 +40,9 @@ impl ModbusTcpChannel {
 impl Channel for ModbusTcpChannel {
     fn run(mut self) -> JoinHandle<()> {
         self.status = ChannelStatus::Running;
-        let handle = thread::spawn(move || {
+        let builder = thread::Builder::new()
+            .name(self.config.name)
+            .spawn(move || {
 
             // Make connection to ModbusTCP server
             // let socket_full_string = format!("{}:{}", self.config.host ,self.config.port);
@@ -46,7 +50,10 @@ impl Channel for ModbusTcpChannel {
 
             let addr: IpAddr = self.config.host.parse().unwrap();
             let socket = SocketAddr::from((addr, self.config.port));
+            log::info!("Preparing new modbus tcp connection IP: {} Port: {}", socket.ip(), socket.port());
 
+
+            let aggregator = self.aggregator_tx.clone();
             // let mut socket_addr: SocketAddr = SocketAddr::new(Ipv4Addr::from_str("127.0.0.1").unwrap().into(), 502);
             // if self.config.host.contains(":") {
             //     // let new_ip = std::net::Ipv6Addr::from_str(&self.config.host);
@@ -60,103 +67,126 @@ impl Channel for ModbusTcpChannel {
             //     socket_addr.set_ip(std::net::Ipv4Addr::from_str(&self.config.host).unwrap().into());
             // }
             // socket_addr.set_port(self.config.port);
+            let mut modbus = Modbus::new_tcp(&socket.ip().to_string(), socket.port() as i32).unwrap();
+            modbus.set_byte_timeout(Timeout::new(0,50000)).unwrap();
+            modbus.set_response_timeout(Timeout::new(1,50000)).unwrap();
+            modbus.set_error_recovery(Some(&[ErrorRecoveryMode::Protocol, ErrorRecoveryMode::Link])).unwrap();
+            match modbus.connect() {
+                Ok(_) => log::info!("Connected to modbusTCP "),
+                Err(e) => log::error!("Error connecting to modbusTCP: {:?}", modbus.ctx)    
+            };
             // let socket_addr = socket_addr.into();
             loop { 
                 // log::info!("Sleeping for 20s");
-                thread::sleep(Duration::from_millis(30000));
+                thread::sleep(Duration::from_millis(10000));
                 
                 // Error Handle
-                match sync::tcp::connect(socket) {
-                    Ok(mut ctx) => {
-                        for (slave, reg_map) in &mut self.register_maps {
-                            // Set correct ModbusID to call on
-                            ctx.set_slave(Slave(slave.modbus_id));
+                for (slave, reg_map) in &mut self.register_maps {
+                    // Set correct ModbusID to call on
+                    match modbus.set_slave(slave.modbus_id) {
+                        Ok(_) => log::trace!("Switched to slave with id: {}", slave.modbus_id),
+                        Err(e) => log::error!("Error switching to modbus slave id: {} error: {:?}", slave.modbus_id, e)
+                    };
 
-                            let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
-                            let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
-                            // Read Attributes 
-                            for reg_group in &reg_map.attributes {
-                                
-                                let mut data_point_vec: Vec<DataPoint> = vec![];
+                    let mut attributes_message: AttributeMessage = (slave.device_name.clone(), HashMap::new());
+                    let mut timeseries_message: TimeseriesMessage = (slave.device_name.clone(), vec![]);
+                    // Read Attributes 
+                    for reg_group in &reg_map.attributes {
+                        
+                        let mut data_point_vec: Vec<DataPoint> = vec![];
+                        let mut read_buffer =  vec![0u16; 200];
 
-                                // Call group 
-                                log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
-                                let reg_response = ctx.read_holding_registers(
-                                        reg_group.starting_address,
-                                        reg_group.elements_count);
+                        // Call group 
+                        log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
+                        }
+                        match modbus.read_registers(reg_group.starting_address,reg_group.elements_count,&mut read_buffer) {
+                            Ok(c) => {
+                                log::debug!("Success reading register group: {:?} return code: {}",reg_group, c);
+                            },
+                            Err(e) => {
+                                log::error!("Error reading register group: {:?} return code: {}", reg_group, e);
+                                continue
+                            }
+                        };
+                        let mut buff = ByteBuffer::new();
+                        for word in read_buffer.clone() {
+                            buff.write_u16(word);
+                        }
 
-                                let reg_response = match reg_response {
-                                    Ok(res) => res,
-                                    Err(e) => {
-                                        log::error!("Error reading holding registers: {:?}", e);
-                                        continue
-                                    }
-                                };
-
-                                for data_point in &reg_group.data_points {
-                                    let point = data_point.parse(reg_response.clone());
+                        for data_point in &reg_group.data_points {
+                            if !((data_point.data_offset + 4) <= buff.len())  {
+                                log::warn!("continuing... , would crash otherwise");
+                                continue;
+                            }
+                            match data_point.parse(read_buffer.clone()) {
+                                Some(point) => {
                                     data_point_vec.push(point.clone());
                                     // parse into message
                                     attributes_message.1.insert(point.key, point.value);
-                                }
-                                log::info!("Read and parsed register group with data {} points", data_point_vec.len());
-                                log::debug!("Datapoints in reg group: {:?}", data_point_vec);
-                                log::debug!("Attribute message: {:?}", attributes_message)
-
+                                },
+                                None => continue
                             }
-                            // Read Timeseries
-                            for reg_group in &reg_map.timeseries {
-                                
-                                let mut data_point_vec: Vec<DataPoint> = vec![];
+                        }
 
-                                // Call group 
-                                log::trace!("Reading starting address: {:}, and register count: {:}", reg_group.starting_address, reg_group.elements_count);
-                                let reg_response = ctx.read_holding_registers(
-                                        reg_group.starting_address,
-                                        reg_group.elements_count);
-                                
-                                let reg_response = match reg_response {
-                                    Ok(res) => res,
-                                    Err(e) => {
-                                        log::error!("Error reading holding registers: {:?}", e);
-                                        continue
-                                    }
-                                };
 
-                                for data_point in &reg_group.data_points {
-                                    let point = data_point.parse(reg_response.clone());
-                                    data_point_vec.push(point);
-                                }
-                                log::info!("Read and parsed register group with data {} points", data_point_vec.len());
-                                log::debug!("Datapoints in reg group: {:?}", data_point_vec);
-                                timeseries_message.1.push(OneTelemetry::from(data_point_vec))
+                        log::info!("Read and parsed register group with data {} points", data_point_vec.len());
+                        log::debug!("Datapoints in reg group: {:?}", data_point_vec);
+                        log::debug!("Attribute message: {:?}", attributes_message)
+
+                    }
+                    // Read Timeseries
+                    for reg_group in &reg_map.timeseries {
+                        
+                        let mut data_point_vec: Vec<DataPoint> = vec![];
+                        let mut read_buffer =  vec![0u16; 200];
+
+                        // Call group 
+                        match modbus.read_registers(reg_group.starting_address,reg_group.elements_count,&mut read_buffer) {
+                            Ok(c) => {
+                                log::debug!("Success reading register group: {:?} return code: {}",reg_group, c);
+                            },
+                            Err(e) => {
+                                log::error!("Error reading register group: {:?} return code: {}", reg_group, e);
+                                continue;
                             }
-                            match self.aggregator_tx.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {
-                                Err(e) => log::error!("Error sending data to aggregation thread! Did it panic? : {:#?}", e),
-                                _ => {}
-                            }
+                        };
+                        match modbus.flush() {
+                            Ok(_) => log::debug!("Flushed untransmited data..."),
+                            Err(e) => log::error!("Error flushing untransmited data: {:?}", e)
                         }
                         
-                        // Disconnect
-                        match ctx.call(Request::Disconnect) {
-                            Ok(r) => log::info!("Disconnect response: {:?}", r),
-                            Err(e) => log::error!("Error disconnecting: {:?}", e)
+
+
+
+                        for data_point in &reg_group.data_points {
+                            match data_point.parse(read_buffer.clone()) {
+                                Some(point)  => {
+                                    data_point_vec.push(point.clone());
+                                },
+                                None => continue
+                            }
                         }
 
-                    },
 
-
-                    Err(e)  => {
-                        log::error!("Error Connecting to ModbusTCP server: {:?}", e);
+                        log::info!("Read and parsed register group with data {} points", data_point_vec.len());
+                        log::debug!("Datapoints in reg group: {:?}", data_point_vec);
+                        timeseries_message.1.push(OneTelemetry::from(data_point_vec))
                     }
-
+                    // Disconnect
+                    modbus.close();
+                    match aggregator.send(AggregatorAction::SendBoth(attributes_message, timeseries_message)) {
+                        Err(e) => log::error!("Error sending data to aggregation thread! Did it panic? : {:#?}", e),
+                        _ => {}
+                    }
                 }
-                    
             }
-        });
+        }).unwrap();
     
 
-        handle
+        builder
     }
 
     fn status(&self) ->  crate::channels::ChannelStatus {

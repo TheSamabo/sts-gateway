@@ -52,8 +52,8 @@ impl Aggregator {
                                 let attributes_message = json!({
                                     &device_name: attributes.1
                                 }).to_string();
-                                log::debug!("JSON Attributes: {:?}", attributes_message);
-                                log::debug!("JSON Timeseries: {:?}", timeseries_message);
+                                log::trace!("JSON Attributes: {:?}", attributes_message);
+                                log::trace!("JSON Timeseries: {:?}", timeseries_message);
                                 
                                 // This is unsafe as fuck
                                 match self.storage_tx.send(SqliteStorageAction::InsertBoth(Insert{
@@ -70,11 +70,11 @@ impl Aggregator {
                                 }
                                 // As are these...
                                 match self.transport_tx.send(TransportAction::SendTimeseries(timeseries_message.clone())) {
-                                    Ok(_) => log::trace!("SentTimeseries to transport with message: {}", timeseries_message),
+                                    Ok(_) => log::debug!("SentTimeseries to transport with message: {}", timeseries_message),
                                     Err(e) => log::error!("Error while sending a message to trasport channel: {:?}",e)
                                 };
                                 match self.transport_tx.send(TransportAction::SendAttributes(attributes_message.clone())) {
-                                    Ok(_) => log::trace!("SentAttributes to transport with message: {}", attributes_message),
+                                    Ok(_) => log::debug!("SentAttributes to transport with message: {}", attributes_message),
                                     Err(e) => log::error!("Error while sending a message to trasport channel: {:?}",e)
                                 };
                             },

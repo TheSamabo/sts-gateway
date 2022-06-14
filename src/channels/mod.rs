@@ -1,7 +1,6 @@
 use std::{thread::JoinHandle, collections::HashMap};
 
 use serde_yaml::Error;
-use tokio_serial::DataBits;
 use chrono::{Utc};
 
 use crate::definitions::OneTelemetry;

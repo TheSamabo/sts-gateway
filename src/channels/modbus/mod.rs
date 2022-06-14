@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 use serde::Serialize;
-use tokio_serial::{DataBits, Parity, StopBits, FlowControl};
-use tokio_modbus::slave::Slave;
+// use tokio_serial::{DataBits, Parity, StopBits, FlowControl};
+// use tokio_modbus::slave::Slave;
 
 use serde_yaml::Error;
 use serde_yaml::from_str;
@@ -65,10 +65,10 @@ pub struct ModbusDataPointReader {
 }
 
 impl ModbusDataPointReader {
-    pub fn  parse(&self, data: Vec<u16>) -> DataPoint{
+    pub fn  parse(&self, data: Vec<u16>) -> Option<DataPoint>{
         // let (first, second, third) = dbg!(data.align_to::<u8>());
 
-        log::debug!("Incommint Vec<u16>: {:?}", data);
+        log::trace!("Incommint Vec<u16>: {:?}", data);
         log::trace!("Data offset: {}", self.data_offset);
         let mut buff = ByteBuffer::new();
         for word in data {
@@ -81,64 +81,83 @@ impl ModbusDataPointReader {
         match self.data_type {
             ModbusDataType::Float => {
                 // Float =  32bits /  2 registers
-
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_f32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
                     
 
             },
             ModbusDataType::Double => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 8) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_f64();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
             },
             ModbusDataType::Int32 => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_i32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
 
             },
             ModbusDataType::UInt32 => {
                 buff.set_rpos(self.data_offset);
+                if !((self.data_offset + 4) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_u32();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
 
             },
             ModbusDataType::UInt16 => {
                 buff.set_rpos(min(self.data_offset, buff.len()));
+                if !((self.data_offset + 2) <= buff.len())  {
+                    log::warn!("continuing... , would crash otherwise");
+                    return None;
+                }
                 let value = buff.read_u16();
 
                 log::debug!("Value prased: {}", value);
-                DataPoint {
+                Some(DataPoint {
                     key: self.key_name.clone(),
                     value: value.to_string(),
                     ts: None
-                }
+                })
             }
             _ => {
                 todo!()
@@ -153,7 +172,8 @@ pub struct ModbusSlave {
     pub device_name: String,
     pub device_type: Option<String>,
     pub modbus_id: ModbusSlaveId,
-    pub register_map: String
+    pub register_map: String,
+    // pub file_descriptor: Option<i32>
 
 }
 
@@ -162,7 +182,7 @@ pub type ModbusSlaveId = u8;
 
 #[derive(Serialize, Deserialize ,Debug)]
 pub struct ModbusClientTcpConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub host: String,
     pub port: u16,
     pub slaves: Vec<ModbusSlave>
@@ -188,7 +208,7 @@ impl ChannelConfig for ModbusClientTcpConfig {
 // TODO: IMplemet Into trait for tokio_serial::SerialPortBuilder
 #[derive(Debug, Deserialize, Clone)]
 pub struct ModbusClientRtuConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub port: String,
     pub baudrate: u32,
     pub parity: char,
